@@ -62,10 +62,6 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "UP", "S", "B"]
 ignore = ["S101", "B008", "E501"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

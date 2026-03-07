@@ -73,7 +73,10 @@ def create_session_factory(engine) -> async_sessionmaker[AsyncSession]:
     )
 
 
-async def get_session(session_factory: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession, None]:
+async def get_session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    """Low-level session generator. Prefer ``get_db`` for FastAPI endpoints."""
     async with session_factory() as session:
         try:
             yield session
@@ -81,3 +84,30 @@ async def get_session(session_factory: async_sessionmaker[AsyncSession]) -> Asyn
         except Exception:
             await session.rollback()
             raise
+
+
+def get_db(session_factory: async_sessionmaker[AsyncSession]):
+    """
+    Return a FastAPI ``Depends``-compatible async generator for database sessions.
+
+    Usage in your own routes that run alongside the A2A library::
+
+        from fastapi import Depends
+        from fastapi_a2a.database import get_db
+
+        @router.get("/my-endpoint")
+        async def my_route(
+            db: AsyncSession = Depends(get_db(app.state.session_factory)),
+        ):
+            ...
+    """
+    async def _dependency() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    return _dependency

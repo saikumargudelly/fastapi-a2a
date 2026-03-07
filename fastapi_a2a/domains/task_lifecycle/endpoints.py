@@ -11,16 +11,18 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
+from fastapi import status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_a2a.domains.task_lifecycle.models import Artifact, Message, Task, TaskSession
+from fastapi_a2a.exceptions import TaskAlreadyCancelledError, TaskNotFoundError
 
 router = APIRouter(tags=["Task Lifecycle"], prefix="/tasks")
 
 
-@router.get("")
+@router.get("", status_code=http_status.HTTP_200_OK)
 async def list_tasks(request: Request) -> dict[str, Any]:
     """List all tasks for the current session / agent card."""
     db: AsyncSession = request.state.db
@@ -53,7 +55,7 @@ async def list_tasks(request: Request) -> dict[str, Any]:
     }
 
 
-@router.get("/{task_id}")
+@router.get("/{task_id}", status_code=http_status.HTTP_200_OK)
 async def get_task(task_id: uuid.UUID, request: Request) -> dict[str, Any]:
     """Get a task with its full message history and artifacts."""
     db: AsyncSession = request.state.db
@@ -61,7 +63,7 @@ async def get_task(task_id: uuid.UUID, request: Request) -> dict[str, Any]:
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise TaskNotFoundError(f"Task {task_id} not found")
 
     msgs_result = await db.execute(
         select(Message)
@@ -100,7 +102,7 @@ async def get_task(task_id: uuid.UUID, request: Request) -> dict[str, Any]:
     }
 
 
-@router.post("/{task_id}/cancel")
+@router.post("/{task_id}/cancel", status_code=http_status.HTTP_200_OK)
 async def cancel_task(task_id: uuid.UUID, request: Request) -> dict[str, Any]:
     """Request cancellation of a running or submitted task."""
     db: AsyncSession = request.state.db
@@ -108,12 +110,11 @@ async def cancel_task(task_id: uuid.UUID, request: Request) -> dict[str, Any]:
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise TaskNotFoundError(f"Task {task_id} not found")
 
     if task.status in ("completed", "failed", "cancelled"):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Task is already in terminal state: {task.status}",
+        raise TaskAlreadyCancelledError(
+            f"Task is already in terminal state: {task.status}"
         )
 
     task.status = "cancelled"

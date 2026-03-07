@@ -2,7 +2,7 @@
 SQLAlchemy ORM models for Safety & Reputation domain:
   - card_scan_result, sanitization_report,
     synthetic_check, synthetic_check_result,
-    agent_reputation, trace_redaction_test
+    agent_reputation
 
 Note: skill_query_log and nlp_analyzer_config belong to the
 Dynamic Capability domain and live in
@@ -203,28 +203,3 @@ class AgentReputation(Base):
     )
 
 
-class TraceRedactionTest(Base):
-    """Fuzz/unit test run validating trace redaction rules (v0.6.0)."""
-    __tablename__ = "trace_redaction_test"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    rules_engine_version: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    test_suite_name: Mapped[str] = mapped_column(
-        String(32), nullable=False,
-        doc="predeploy_gate | nightly_regression | manual_run"
-    )
-    test_cases: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    total_cases: Mapped[int] = mapped_column(Integer, nullable=False)
-    passed_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    failed_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    failed_cases: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    test_result: Mapped[str] = mapped_column(String(8), nullable=False, index=True, doc="passed | failed | error")
-    deploy_gate_status: Mapped[str] = mapped_column(
-        String(16), nullable=False,
-        doc="approved | blocked | not_applicable"
-    )
-    ran_by: Mapped[str] = mapped_column(String(256), nullable=False)
-    ran_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
