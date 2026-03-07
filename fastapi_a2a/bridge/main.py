@@ -2,7 +2,8 @@
 FastApiA2A — Main bridge class.
 Usage:
     from fastapi_a2a import FastApiA2A, RegistryConfig
-    a2a = FastApiA2A(app, registry=RegistryConfig(url="https://registry.example.com"))
+    a2a = FastApiA2A(app, url="https://my-agent.example.com")
+    # Registry auto-discovered via DNS-SD; or pass registry=RegistryConfig(url="...")
 """
 from __future__ import annotations
 

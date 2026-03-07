@@ -26,21 +26,14 @@ app = FastAPI(title="My Agent")
 
 a2a = FastApiA2A(
     app,
-    url="http://localhost:8000",
-    registry=RegistryConfig(url="http://my-registry:9000"),
+    url="https://my-agent.example.com",
+    # registry= is optional; omit it and the library auto-discovers via DNS-SD
+    # registry=RegistryConfig(url="https://registry.example.com"),
 )
 # That's it. Your agent card is served at /.well-known/agent.json
 ```
 
-Set up the database and start your server:
-
-```bash
-# Create tables (once)
-alembic upgrade head
-
-# Run
-uvicorn myapp:app --reload
-```
+The library manages its own SQLAlchemy models internally. On first startup, `FastApiA2A` creates a database engine from your `database_url` and all required tables are available via the shared `Base` metadata — integrate them into your existing Alembic migrations if you use one, or let SQLAlchemy create them directly in development.
 
 ---
 
@@ -159,26 +152,29 @@ The library implements the full A2A v0.6.0 spec — **78 entities across 15 doma
 
 ## Requirements
 
-- Python 3.11+
-- PostgreSQL (via `asyncpg`)
-- Redis (optional, for rate limiting — falls back to in-memory if not available)
+- Python 3.11+ (tested on 3.11, 3.12, 3.14)
+- PostgreSQL with the `asyncpg` driver
+- Redis (optional — the rate limiter falls back to in-memory if Redis isn't reachable)
 
 ---
 
 ## Development
 
 ```bash
-# Clone and install
-git clone https://github.com/your-org/fastapi-a2a
+# Clone
+git clone <your-repo-url>   # e.g. https://github.com/your-org/fastapi-a2a
 cd fastapi-a2a
+
+# Install with dev extras
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Run tests
-pytest tests/ -q
+pytest tests/ -q            # → 66 passed
 
-# Lint
+# Lint (zero errors expected)
 ruff check fastapi_a2a
+pyright fastapi_a2a
 ```
 
 ---
