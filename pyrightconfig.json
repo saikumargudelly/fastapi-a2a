@@ -1,8 +1,5 @@
 {
-  "venvPath": "/Users/saikumargudelly/Projects/fastapi-a2a",
-  "venv": ".venv",
-  "pythonVersion": "3.14",
-  "pythonPlatform": "Darwin",
+  "pythonVersion": "3.11",
   "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
   "reportMissingImports": "none",
@@ -20,7 +17,6 @@
   "reportIndexIssue": "none",
   "exclude": [
     ".venv/**",
-    "alembic/**",
     "**/__pycache__/**"
   ],
   "include": [
