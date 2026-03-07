@@ -10,3 +10,7 @@ env/
 venv/
 .DS_Store
 fastapi-a2a-erd*
+
+# Editor / IDE
+.vscode/
+.pyre_configuration
