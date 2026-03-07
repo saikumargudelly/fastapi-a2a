@@ -1,0 +1,26 @@
+{
+  "source_directories": [
+    {
+      "import_root": ".",
+      "source": "fastapi_a2a"
+    },
+    {
+      "import_root": ".",
+      "source": "tests"
+    }
+  ],
+  "search_path": [
+    {
+      "site_package": ".venv/lib/python3.14/site-packages"
+    }
+  ],
+  "python_version": "3.14",
+  "strict": false,
+  "ignore_all_errors": [
+    "fastapi_a2a/domains/embedding",
+    "fastapi_a2a/domains/federation",
+    "fastapi_a2a/domains/token_hardening",
+    "fastapi_a2a/domains/safety",
+    "fastapi_a2a/domains/security"
+  ]
+}
