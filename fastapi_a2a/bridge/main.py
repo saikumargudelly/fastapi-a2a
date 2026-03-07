@@ -160,6 +160,8 @@ class FastApiA2A:
         """
         self._engine = create_engine(self._database_url)
         self._session_factory = create_session_factory(self._engine)
+        assert self._engine is not None
+        assert self._session_factory is not None
 
         # Create all tables (dev mode — use Alembic for production)
         async with self._engine.begin() as conn:
