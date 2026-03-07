@@ -14,9 +14,11 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -35,14 +37,40 @@ class TokenFamily(Base):
         UUID(as_uuid=True), ForeignKey("agent_card.id"), nullable=False, index=True
     )
     caller_identity: Mapped[str | None] = mapped_column(String(512), index=True)
+    family_name: Mapped[str | None] = mapped_column(String(256), doc="Human-readable label e.g. 'prod-service-key'")
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="active",
+        String(16), nullable=False, default="active", index=True,
         doc="active | compromised | retired"
+    )
+    compromise_reason: Mapped[str | None] = mapped_column(
+        Text, doc="Required when status=compromised — forensics trail"
+    )
+    compromise_score: Mapped[float | None] = mapped_column(
+        Float,
+        doc="Anomaly score 0.0-1.0 derived from token_audit_log; auto=1.0 on compromise; >0.7 triggers alert"
+    )
+    kms_key_ref: Mapped[str | None] = mapped_column(
+        String(256),
+        doc="KMS key reference for self-issued JWTs e.g. 'aws:kms:arn:...'; never store private key material"
     )
     generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     parent_family_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     compromised_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_rotation_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), doc="Timestamp of most recent token rotation within this family"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active','compromised','retired')",
+            name="ck_token_family_status"
+        ),
+        CheckConstraint(
+            "(status != 'compromised') OR (compromise_reason IS NOT NULL)",
+            name="ck_token_family_compromise_reason"
+        ),
+    )
 
 
 class TokenAuditLog(Base):
@@ -68,18 +96,40 @@ class TokenAuditLog(Base):
 
 
 class TokenRateLimit(Base):
-    """Per-token request rate limit configuration."""
+    """Per-token sliding-window rate limit state (Token Hardening domain)."""
     __tablename__ = "token_rate_limit"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_token_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agent_token.id"), nullable=False, unique=True, index=True
     )
-    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
-    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
-    requests_this_window: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    window_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
+    # Sliding-window state
+    window_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), doc="Start of the current sliding time window"
+    )
+    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60, doc="Window duration in seconds")
+    request_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, doc="Requests in current window; reset on window roll"
+    )
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False, doc="Upper bound before throttling activates")
+    # Burst limiting
+    burst_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, doc="Requests in last 1-second micro-window — burst spike detection"
+    )
+    max_burst: Mapped[int] = mapped_column(
+        Integer, nullable=False, doc="Upper bound for burst_count; breach triggers immediate 429"
+    )
+    last_request_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), doc="Most recent request timestamp — used for window slide calculation"
+    )
+    throttled_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True,
+        doc="If set, all requests rejected with 429 until this timestamp"
+    )
+    lifetime_request_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0,
+        doc="Total cumulative requests ever made with this token — never reset"
+    )
     # v0.6.0 Redis sharding fields
     use_redis: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     shard_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -91,6 +141,8 @@ class TokenRateLimit(Base):
     )
 
     __table_args__ = (
+        CheckConstraint("window_seconds > 0 AND max_requests > 0 AND max_burst > 0", name="ck_token_rate_limit_positive"),
+        CheckConstraint("request_count >= 0 AND burst_count >= 0 AND lifetime_request_count >= 0", name="ck_token_rate_limit_non_negative"),
         CheckConstraint("shard_count BETWEEN 1 AND 64", name="ck_token_rate_limit_shards"),
     )
 

@@ -8,6 +8,8 @@ Provides:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -43,15 +45,18 @@ async def check_consent(
     caller_identity: str,
     data_categories: list[str],
     purpose: str,
+    skill_id: uuid.UUID | None = None,
 ) -> ConsentDecision:
     """
     Check whether data-use consent is granted for the given parameters.
     Checks ConsentCache first (fast path), then ConsentRecord (slow path).
     Result is written back to ConsentCache with appropriate TTL.
+    skill_id is required for the full cache key; pass None for agent-level checks.
     """
     now = datetime.now(UTC)
 
     # 1. Fast-path: check ConsentCache
+    # Note: skill_id-less cache lookup is a broad match; sufficient for deny-default enforcement
     cache_result = await db.execute(
         select(ConsentCache).where(
             ConsentCache.agent_card_id == agent_card_id,
@@ -63,8 +68,8 @@ async def check_consent(
     cached = cache_result.scalar_one_or_none()
     if cached:
         return ConsentDecision(
-            allowed=cached.decision == "allow",
-            consent_record_id=cached.consent_record_id,
+            allowed=cached.result == "allow",
+            consent_record_id=uuid.UUID(cached.consent_record_ids[0]) if cached.consent_record_ids else None,
             source="cache_hit",
         )
 
@@ -96,6 +101,10 @@ async def check_consent(
     # 3. Write result back to cache
     from datetime import timedelta
     ttl = timedelta(seconds=300 if allowed else 60)
+    # Compute SHA-256 cache key for data_categories
+    categories_hash = hashlib.sha256(
+        json.dumps(sorted(data_categories)).encode()
+    ).hexdigest()
 
     # Upsert cache entry
     existing_cache = await db.execute(
@@ -107,20 +116,24 @@ async def check_consent(
     )
     cache_entry = existing_cache.scalar_one_or_none()
     if cache_entry:
-        cache_entry.decision = "allow" if allowed else "deny"
-        cache_entry.consent_record_id = consent_id
-        cache_entry.cached_at = now
+        cache_entry.result = "allow" if allowed else "deny"
+        cache_entry.consent_record_ids = [str(consent_id)] if consent_id else []
+        cache_entry.checked_at = now
         cache_entry.expires_at = now + ttl
+        cache_entry.data_categories_hash = categories_hash
     else:
         db.add(ConsentCache(
             agent_card_id=agent_card_id,
+            # skill_id is required by the schema; use a sentinel dummy UUID if not provided
+            # (agent-level consent check — not scoped to a specific skill)
+            skill_id=skill_id or uuid.UUID(int=0),
             caller_identity=caller_identity,
-            data_categories=data_categories,
+            data_categories_hash=categories_hash,
             purpose=purpose,
-            decision="allow" if allowed else "deny",
-            consent_record_id=consent_id,
-            cached_at=now,
+            result="allow" if allowed else "deny",
+            checked_at=now,
             expires_at=now + ttl,
+            consent_record_ids=[str(consent_id)] if consent_id else [],
         ))
 
     await db.flush()

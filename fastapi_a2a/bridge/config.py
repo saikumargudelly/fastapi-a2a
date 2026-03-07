@@ -33,10 +33,11 @@ class FastApiA2AConfig(BaseSettings):
     """
     model_config = SettingsConfigDict(env_prefix="A2A_", env_file=".env", extra="ignore")
 
-    # Database
-    database_url: str = Field(
-        default="postgresql+asyncpg://localhost/fastapi_a2a",
-        description="Async PostgreSQL connection URL",
+    # Database — required at runtime; supply via A2A_DATABASE_URL env var or
+    # by passing database_url= directly to FastApiA2A(...).
+    database_url: str | None = Field(
+        default=None,
+        description="Async PostgreSQL connection URL. Set A2A_DATABASE_URL env var or pass database_url= to FastApiA2A.",
     )
 
     # Registry discovery (§17.8.1)

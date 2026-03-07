@@ -229,11 +229,11 @@ async def _handle_tasks_send(rpc_req: JsonRpcRequest, db: AsyncSession, request:
             message_id=msg.id,
             part_type=part.type,
             content_text=part.text,
-            content_url=part.url,
+            file_url=part.url,
             content_data=part.data,
-            mime_type=part.mime_type,
+            file_mime_type=part.mime_type,
             metadata_=part.metadata,
-            part_index=idx,
+            sort_order=idx,
         )
         db.add(part_obj)
 

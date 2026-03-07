@@ -49,9 +49,13 @@ class RedisRateLimiter:
     Sliding-window rate limiter using Redis INCR + LUA.
     Falls back to in-memory counter when Redis is unavailable.
 
-    Usage:
-        limiter = RedisRateLimiter(redis_url="redis://localhost:6379", shards=8)
-        result = await limiter.check(key="agent_id:caller_id", limit=100, window=60)
+    Pass ``redis_url`` to enable Redis-backed persistence; omit it (or pass ``None``)
+    to use the in-memory fallback (suitable for single-process deployments / testing).
+
+    Usage::
+
+        limiter = RedisRateLimiter(redis_url="redis://...", shards=8)
+        result = await limiter.check(key="agent:caller", limit=100, window=60)
         if not result.allowed:
             raise HTTPException(429, headers={"Retry-After": str(result.retry_after_seconds)})
     """

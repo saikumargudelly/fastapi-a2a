@@ -30,14 +30,31 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
-def get_database_url() -> str:
-    url = os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/fastapi_a2a")
-    # Replace postgres:// with postgresql+asyncpg:// for asyncpg compatibility
-    return url.replace("postgres://", "postgresql+asyncpg://")
+def get_database_url() -> str | None:
+    """
+    Return the database URL from the environment, or ``None`` if not set.
+
+    Checks ``DATABASE_URL`` first (standard Heroku/Render convention), then
+    ``A2A_DATABASE_URL`` (the library-specific prefix).  Returns ``None`` when
+    neither variable is present — callers should raise a clear ``ValueError``
+    rather than silently connecting to a non-existent local database.
+
+    Normalises ``postgres://`` → ``postgresql+asyncpg://`` for asyncpg compat.
+    """
+    raw = os.getenv("DATABASE_URL") or os.getenv("A2A_DATABASE_URL")
+    if raw is None:
+        return None
+    return raw.replace("postgres://", "postgresql+asyncpg://")
 
 
 def create_engine(database_url: str | None = None):
+    """Create an async SQLAlchemy engine. Raises ``ValueError`` if no URL is resolved."""
     url = database_url or get_database_url()
+    if url is None:
+        raise ValueError(
+            "No database URL found. Set the DATABASE_URL or A2A_DATABASE_URL "
+            "environment variable, or pass database_url= to FastApiA2A()."
+        )
     return create_async_engine(
         url,
         pool_size=20,

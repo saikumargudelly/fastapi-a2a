@@ -84,6 +84,10 @@ class Heartbeat(Base):
     skill_statuses: Mapped[dict[str, str] | None] = mapped_column(JSONB, doc="skill_id → ok|degraded|down")
     last_http_status: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
+    region: Mapped[str | None] = mapped_column(
+        String(16),
+        doc="Region this heartbeat came from (ERD Gap 1 §16.1.3) — used to detect active region during failover"
+    )
     checked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

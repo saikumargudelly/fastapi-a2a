@@ -1,9 +1,14 @@
 """
 FastApiA2A — Main bridge class.
-Usage:
+
+Usage::
+
     from fastapi_a2a import FastApiA2A, RegistryConfig
-    a2a = FastApiA2A(app, url="https://my-agent.example.com")
-    # Registry auto-discovered via DNS-SD; or pass registry=RegistryConfig(url="...")
+
+    a2a = FastApiA2A(app, url="https://your-agent-url.example.com")
+    # url is required — set it to your agent's publicly reachable base URL.
+    # Registry is auto-discovered via DNS-SD; or provide one explicitly:
+    # a2a = FastApiA2A(app, url="...", registry=RegistryConfig(url="..."))
 """
 from __future__ import annotations
 
@@ -16,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from fastapi_a2a.bridge.config import FastApiA2AConfig, RegistryConfig
 from fastapi_a2a.bridge.inspector import inspect_routes
-from fastapi_a2a.database import Base, create_engine, create_session_factory
+from fastapi_a2a.database import Base, create_engine, create_session_factory, get_database_url
 from fastapi_a2a.domains.consent.endpoints import router as consent_router
 from fastapi_a2a.domains.core_a2a.endpoints import router as a2a_router
 from fastapi_a2a.domains.core_a2a.models import (
@@ -52,16 +57,21 @@ class FastApiA2A:
         name: str | None = None,
         description: str | None = None,
         version: str = "1.0.0",
-        url: str = "http://localhost:8000",
+        url: str,
         registry: RegistryConfig | None = None,
         config: FastApiA2AConfig | None = None,
         database_url: str | None = None,
         documentation_url: str | None = None,
         provider_org: str | None = None,
         provider_url: str | None = None,
+        icon_url: str | None = None,
         data_region: str | None = None,
+        min_sdk_version: str | None = None,
         streaming: bool = False,
         push_notifications: bool = False,
+        input_modes: list[str] | None = None,
+        output_modes: list[str] | None = None,
+        supports_auth_schemes: list[str] | None = None,
     ) -> None:
         self._app = app
         self._name = name or (app.title or "A2A Agent")
@@ -70,13 +80,32 @@ class FastApiA2A:
         self._url = url
         self._registry_config = registry
         self._config = config or FastApiA2AConfig()  # type: ignore[call-arg]
-        self._database_url = database_url or self._config.database_url
+        _db_url = (
+            database_url
+            or (self._config.database_url if self._config.database_url else None)
+            or get_database_url()
+        )
+        if _db_url is None:
+            raise ValueError(
+                "No database URL provided. Set the A2A_DATABASE_URL (or DATABASE_URL) "
+                "environment variable, or pass database_url= to FastApiA2A()."
+            )
+        self._database_url = _db_url
         self._documentation_url = documentation_url
         self._provider_org = provider_org
         self._provider_url = provider_url
+        self._icon_url = icon_url
         self._data_region = data_region
+        self._min_sdk_version = min_sdk_version
         self._streaming = streaming
         self._push_notifications = push_notifications
+        # Content-type negotiation — library users declare what their agent supports;
+        # no hardcoded defaults: caller must be explicit or leave None to omit from DB.
+        self._input_modes: list[str] = input_modes if input_modes is not None else ["application/json"]
+        self._output_modes: list[str] = output_modes if output_modes is not None else ["application/json"]
+        self._supports_auth_schemes: list[str] = (
+            supports_auth_schemes if supports_auth_schemes is not None else []
+        )
 
         self._engine: AsyncEngine | None = None
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -220,9 +249,9 @@ class FastApiA2A:
                 streaming=self._streaming,
                 push_notifications=self._push_notifications,
                 state_transition_history=False,
-                default_input_modes=["application/json"],
-                default_output_modes=["application/json"],
-                supports_auth_schemes=["bearer", "none"],
+                default_input_modes=self._input_modes,
+                default_output_modes=self._output_modes,
+                supports_auth_schemes=self._supports_auth_schemes,
             )
             db.add(caps)
             await db.flush()
@@ -249,8 +278,8 @@ class FastApiA2A:
                     description=skill_data["description"],
                     tags=skill_data.get("tags", []),
                     examples=skill_data.get("examples", []),
-                    input_modes=skill_data.get("input_modes", ["application/json"]),
-                    output_modes=skill_data.get("output_modes", ["application/json"]),
+                    input_modes=skill_data.get("input_modes", self._input_modes),
+                    output_modes=skill_data.get("output_modes", self._output_modes),
                 )
                 db.add(skill)
             else:

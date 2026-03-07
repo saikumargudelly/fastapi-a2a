@@ -37,7 +37,11 @@ class AgentCard(Base):
     documentation_url: Mapped[str | None] = mapped_column(String(512))
     provider_org: Mapped[str | None] = mapped_column(String(256))
     provider_url: Mapped[str | None] = mapped_column(String(512))
+    icon_url: Mapped[str | None] = mapped_column(String(512), doc="Agent icon URL; rendered in discovery UIs")
     data_region: Mapped[str | None] = mapped_column(String(64))
+    min_sdk_version: Mapped[str | None] = mapped_column(
+        String(32), doc="Minimum SDK version that can interact with this card; blocks older clients with 4012"
+    )
 
     # Capability flags (stored in AgentCapabilities but denormalised for perf)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -48,7 +52,10 @@ class AgentCard(Base):
 
     # Card signing
     jws_signature: Mapped[str | None] = mapped_column(Text)
-    hash_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
+    hash_sha256: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="",
+        doc="SHA-256 hash of card JSON; change triggers card.drifted event and card_history insert"
+    )
 
     # v0.6.0 quarantine fields
     quarantine_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
@@ -74,6 +81,10 @@ class AgentCard(Base):
     __table_args__ = (
         CheckConstraint("quarantine_status IN ('none','quarantined','released')", name="ck_agent_card_quarantine_status"),
         CheckConstraint("approval_status IN ('active','pending','suspended','rejected','warning')", name="ck_agent_card_approval_status"),
+        CheckConstraint(
+            "version ~ '^[0-9]+\\.[0-9]+\\.[0-9]+$'",
+            name="ck_agent_card_semver"
+        ),
     )
 
 
@@ -89,12 +100,31 @@ class AgentCapabilities(Base):
     streaming: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     push_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     state_transition_history: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    extended_card_available: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, doc="Auth-gated extended card endpoint exists"
+    )
+    multi_turn: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, doc="Supports conversational multi-turn tasks"
+    )
+    human_in_loop: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, doc="Agent can pause on input_required for human approval"
+    )
+    max_concurrent_tasks: Mapped[int | None] = mapped_column(
+        Integer, doc="Self-reported capacity signal for orchestrators"
+    )
     default_input_modes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     default_output_modes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     supports_auth_schemes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
 
     # Relationships
     agent_card: Mapped[AgentCard] = relationship("AgentCard", back_populates="capabilities")
+
+    __table_args__ = (
+        CheckConstraint(
+            "max_concurrent_tasks IS NULL OR max_concurrent_tasks > 0",
+            name="ck_agent_capabilities_max_concurrent"
+        ),
+    )
 
 
 class SkillSchema(Base):
@@ -138,12 +168,32 @@ class AgentSkill(Base):
     input_modes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     output_modes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
 
+    # Visibility and auth
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+        doc="Appears in public card; False = extended card only"
+    )
+    requires_auth: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+        doc="Skill-level auth override (independent of card-level auth)"
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0,
+        doc="Display ordering in agent card"
+    )
+
     # Typed schema links
     input_schema_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("skill_schema.id"), index=True
     )
     output_schema_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("skill_schema.id"), index=True
+    )
+
+    # FastAPI bridge route this skill wraps
+    route_mapping_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("route_mapping.id"), index=True,
+        doc="→ route_mapping.id — FastAPI route this skill exposes"
     )
 
     # Embedding link (set by embedding pipeline)
@@ -165,6 +215,10 @@ class AgentSkill(Base):
 
     __table_args__ = (
         UniqueConstraint("agent_card_id", "skill_id", name="uq_agent_skill_card_skill"),
+        CheckConstraint(
+            r"skill_id ~ '^[a-z0-9_-]+$'",
+            name="ck_agent_skill_id_url_safe"
+        ),
     )
 
 

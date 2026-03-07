@@ -1,6 +1,6 @@
 """
 SQLAlchemy ORM models for Security domain:
-  - auth_scheme, agent_token, push_notification_config,
+  - security_scheme, agent_token, push_notification_config,
     card_key_revocation_log, consent_proof_token
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -26,8 +27,8 @@ from fastapi_a2a.database import Base
 
 
 class AuthScheme(Base):
-    """Authentication scheme supported by an agent."""
-    __tablename__ = "auth_scheme"
+    """Authentication scheme supported by an agent (ERD: security_scheme)."""
+    __tablename__ = "security_scheme"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_card_id: Mapped[uuid.UUID] = mapped_column(
@@ -38,10 +39,25 @@ class AuthScheme(Base):
         String(32), nullable=False,
         doc="bearer | apikey | oauth2 | openid | mtls | none"
     )
+    scheme_name: Mapped[str] = mapped_column(
+        String(128), nullable=False,
+        doc="Display name e.g. 'Corporate SSO', 'API Key'"
+    )
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        doc="Default scheme for unauthenticated access fallback"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint("agent_card_id", "scheme_name", name="uq_security_scheme_card_name"),
+        CheckConstraint(
+            "scheme_type IN ('bearer','apikey','oauth2','openid','mtls','none')",
+            name="ck_security_scheme_type"
+        ),
+    )
 
 class AgentToken(Base):
     """An issued authentication token for an agent."""
@@ -53,33 +69,82 @@ class AgentToken(Base):
         nullable=False, index=True
     )
     auth_scheme_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("auth_scheme.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("security_scheme.id"), nullable=False, index=True
     )
     family_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, doc="SHA-256 hash")
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True,
+        doc="SHA-256 hash of raw token — never store plaintext token"
+    )
+    token_prefix: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="",
+        doc="First 6-8 chars of raw token for display/debug e.g. 'a2a_sk'; never store full token"
+    )
     caller_identity: Mapped[str | None] = mapped_column(String(512), index=True)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoke_reason: Mapped[str | None] = mapped_column(Text)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), doc="Updated on successful use; NULL = never used"
+    )
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB)
+
+    __table_args__ = (
+        CheckConstraint(
+            r"token_hash ~ '^[a-f0-9]{64}$'",
+            name="ck_agent_token_hash_format"
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > issued_at",
+            name="ck_agent_token_expiry"
+        ),
+    )
 
 
 class PushNotificationConfig(Base):
-    """Configuration for push notifications by an agent."""
+    """Per-task webhook configuration for push notifications (ERD: task-scoped)."""
     __tablename__ = "push_notification_config"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+        doc="One config per task (1:1)"
+    )
     agent_card_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agent_card.id", ondelete="CASCADE"),
-        nullable=False, index=True
+        nullable=False, index=True,
+        doc="Denormalised for agent-level queries"
     )
-    push_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    auth_type: Mapped[str | None] = mapped_column(String(32))
-    auth_token_hash: Mapped[str | None] = mapped_column(String(64))
+    webhook_url: Mapped[str] = mapped_column(
+        String(1024), nullable=False, doc="Client HTTPS endpoint; must be HTTPS"
+    )
+    auth_token_hash: Mapped[str | None] = mapped_column(
+        String(64), doc="SHA-256 of bearer token added to webhook POST headers"
+    )
+    events: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list,
+        doc="Event types to push e.g. ['task.working','task.completed','task.failed']"
+    )
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, doc="Max webhook delivery retries (0-10) — exponential backoff"
+    )
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status_code: Mapped[int | None] = mapped_column(
+        Integer, doc="Last HTTP response code from webhook endpoint"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("retry_count BETWEEN 0 AND 10", name="ck_push_notification_retry_count"),
+        CheckConstraint(
+            "webhook_url LIKE 'https://%'",
+            name="ck_push_notification_webhook_https"
+        ),
+    )
 
 
 class CardKeyRevocationLog(Base):

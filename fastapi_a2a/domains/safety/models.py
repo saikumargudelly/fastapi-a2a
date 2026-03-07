@@ -1,10 +1,12 @@
 """
-SQLAlchemy ORM models for Dynamic Capability domain:
-  - skill_query_log, nlp_analyzer_config
-And Safety & Reputation domain:
+SQLAlchemy ORM models for Safety & Reputation domain:
   - card_scan_result, sanitization_report,
     synthetic_check, synthetic_check_result,
     agent_reputation, trace_redaction_test
+
+Note: skill_query_log and nlp_analyzer_config belong to the
+Dynamic Capability domain and live in
+``fastapi_a2a.domains.dynamic_capability.models``.
 """
 from __future__ import annotations
 
@@ -28,48 +30,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fastapi_a2a.database import Base
-
-# ── Dynamic Capability ─────────────────────────────────────────────────────────
-
-class SkillQueryLog(Base):
-    """Logs all QuerySkill RPC invocations."""
-    __tablename__ = "skill_query_log"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_card_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agent_card.id"), nullable=False, index=True
-    )
-    skill_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agent_skill.id"), nullable=False, index=True
-    )
-    caller_identity: Mapped[str | None] = mapped_column(String(512))
-    input_sample: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    free_text_intent: Mapped[str | None] = mapped_column(Text)
-    required_output_fields: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    can_handle: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    confidence_score: Mapped[float | None] = mapped_column(Float)
-    match_score: Mapped[float | None] = mapped_column(Float)
-    response_details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    queried_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
-    )
-
-
-class NlpAnalyzerConfig(Base):
-    """Configuration for offline NLP analyzer for skill match scoring."""
-    __tablename__ = "nlp_analyzer_config"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_card_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agent_card.id"), nullable=False, unique=True, index=True
-    )
-    model_ref: Mapped[str] = mapped_column(String(256), nullable=False)
-    embedding_config_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    match_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
-    analyzer_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
 
 # ── Safety & Reputation ────────────────────────────────────────────────────────
 

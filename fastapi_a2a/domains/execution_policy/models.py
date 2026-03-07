@@ -54,7 +54,7 @@ class ExecutorPolicy(Base):
 
 
 class TracePolicy(Base):
-    """Sampling rates, PII allowlist, and redaction configuration."""
+    """Per-agent trace sampling rate and PII redaction rules (ERD Gap 6)."""
     __tablename__ = "trace_policy"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -62,50 +62,106 @@ class TracePolicy(Base):
         UUID(as_uuid=True), ForeignKey("agent_card.id", ondelete="CASCADE"),
         nullable=False, unique=True, index=True
     )
-    sampling_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.1)
-    hash_identifiers: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    redaction_rules: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
-    max_attribute_length: Mapped[int] = mapped_column(Integer, nullable=False, default=256)
-
-    # v0.5.0 PII tag keys and value patterns
-    pii_tag_keys: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
-    pii_value_patterns: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    compliance_sample_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.01)
-    compliance_job_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_compliance_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_compliance_status: Mapped[str | None] = mapped_column(String(16))
-
-    # v0.6.0 deny-by-default attribute allowlist
-    attribute_allowlist: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    allowlist_mode: Mapped[str] = mapped_column(
-        String(8), nullable=False, default="warn",
-        doc="disabled | warn | enforce"
+    # Sampling
+    trace_sample_rate: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.01,
+        doc="Fraction 0.0–1.0 of spans to record. Default 1% for public agents."
     )
-    allowlist_violation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_allowlist_violation_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
+    # Attribute limits
+    max_attribute_length: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=256,
+        doc="Max character length of any attribute value; excess truncated with [TRUNCATED]"
+    )
+    max_export_size_bytes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1_048_576,
+        doc="Max uncompressed bytes per export batch (default 1 MB); larger batches are split"
+    )
+    # Redaction rules — JSONB array of {name, pattern, replacement} objects
+    redaction_rules: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        doc="Array of redaction objects: [{name, pattern (regex), replacement}]. Applied at INSERT time"
+    )
+    # Allowlist / blocklist (ERD: TEXT[] columns)
+    attribute_allowlist: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list,
+        doc="If non-empty, ONLY these attribute keys stored. Higher priority than blocklist"
+    )
+    attribute_blocklist: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list,
+        doc="Attribute keys always dropped before storage (e.g. http.request.body, user.email)"
+    )
+    # PII hashing
+    hash_identifiers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        doc="If true, SHA-256 HMAC applied to PII-suggestive attribute values before storage"
+    )
+    hmac_key_ref: Mapped[str | None] = mapped_column(
+        String(256), doc="KMS reference for HMAC key when hash_identifiers=true"
+    )
+    # Master kill switch
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+        doc="False disables all tracing for this agent (emergency kill switch)"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("trace_sample_rate BETWEEN 0.0 AND 1.0", name="ck_trace_policy_sample_rate"),
+        CheckConstraint("max_attribute_length BETWEEN 32 AND 65536", name="ck_trace_policy_attr_length"),
+        CheckConstraint(
+            "max_export_size_bytes BETWEEN 1024 AND 104857600",
+            name="ck_trace_policy_export_size"
+        ),
+    )
 
 
 class ConsentCache(Base):
-    """LRU runtime consent check cache."""
+    """TTL cache of consent_service.check() results per caller/skill (ERD Gap 7)."""
     __tablename__ = "consent_cache"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_card_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agent_card.id"), nullable=False, index=True
     )
+    skill_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_skill.id"), nullable=False, index=True,
+        doc="→ agent_skill.id — the skill whose consent was checked"
+    )
     caller_identity: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
-    data_categories: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
-    purpose: Mapped[str] = mapped_column(String(128), nullable=False)
-    decision: Mapped[str] = mapped_column(String(8), nullable=False, doc="allow | deny")
-    consent_record_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    data_categories_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False,
+        doc="SHA-256 of sorted JSON array of data_categories — cache key dimension"
+    )
+    purpose: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    result: Mapped[str] = mapped_column(
+        String(8), nullable=False,
+        doc="allow | warn | deny — cached consent check result"
+    )
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        doc="When the live consent_record lookup was performed"
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True,
+        doc="Cache TTL. Default checked_at + 300s. Deny results use 60s TTL only"
+    )
+    consent_record_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list,
+        doc="consent_record.id[] — which records contributed; used for precise cache invalidation"
+    )
 
     __table_args__ = (
-        UniqueConstraint("agent_card_id", "caller_identity", "purpose", name="uq_consent_cache"),
+        UniqueConstraint(
+            "agent_card_id", "skill_id", "caller_identity", "data_categories_hash", "purpose",
+            name="uq_consent_cache_full_key"
+        ),
+        CheckConstraint("result IN ('allow','warn','deny')", name="ck_consent_cache_result"),
+        CheckConstraint("expires_at > checked_at", name="ck_consent_cache_ttl"),
     )
+
 
 
 class TraceComplianceJob(Base):
