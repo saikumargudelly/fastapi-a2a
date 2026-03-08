@@ -1,6 +1,6 @@
 [project]
 name             = "fastapi-a2a"
-version          = "0.1.0"
+version          = "1.0.0"
 description      = "Make any FastAPI application A2A-capable — expose and consume agents"
 readme           = "README.md"
 license          = { text = "MIT" }

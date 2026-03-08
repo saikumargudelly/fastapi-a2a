@@ -85,6 +85,26 @@ async def translation_pipeline(req: dict) -> dict:
     return {"final_translation": translation}
 ```
 
+## Production Deployment
+
+If you are deploying `fastapi-a2a` via Gunicorn, Uvicorn workers, or Kubernetes Pods, you **must not** use the default `InMemoryTaskStore`. Memory stores do not sync state across processes—a task started on Worker A cannot be polled or completed by Worker B.
+
+For production, install the Redis extension and pass it during mounting:
+
+```bash
+pip install "fastapi-a2a[redis]"
+```
+
+```python
+import redis.asyncio as redis
+from fastapi_a2a.stores.redis import RedisTaskStore
+
+redis_client = redis.from_url("redis://localhost:6379")
+store = RedisTaskStore(redis_client)
+
+a2a = FastApiA2A(app, name="Agent", url="...", store=store)
+```
+
 ## Architecture
 
 The plugin is designed to be highly modular and defensive:

@@ -45,17 +45,11 @@ from fastapi_a2a._internal.schema import (
     TextPart,
 )
 
-# RequestContext — useful for type hints in route handlers
-from fastapi_a2a._internal.task_manager import RequestContext
-from fastapi_a2a.adapters.base import BaseAdapter
-from fastapi_a2a.adapters.fastapi import FastApiAdapter
 from fastapi_a2a.client import A2AClient
 from fastapi_a2a.decorators import a2a_skill
 from fastapi_a2a.plugin import FastApiA2A
-from fastapi_a2a.stores.base import TaskStore
-from fastapi_a2a.stores.memory import InMemoryTaskStore
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "PROTOCOL_VERSION",
@@ -71,20 +65,16 @@ __all__ = [
     "AgentSkill",
     "Artifact",
     "AuthRequiredError",
-    "BaseAdapter",
     "DataPart",
     "FastApiA2A",
-    "FastApiAdapter",
     "FilePart",
     "FileWithBytes",
     "FileWithUri",
-    "InMemoryTaskStore",
     "InvalidStateTransitionError",
     "Message",
     "OAuthFlows",
     "Part",
     "PushNotSupportedError",
-    "RequestContext",
     "SecurityScheme",
     "Task",
     "TaskListResult",
@@ -92,7 +82,6 @@ __all__ = [
     "TaskNotFoundError",
     "TaskState",
     "TaskStatus",
-    "TaskStore",
     "TextPart",
     "UnsupportedOperationError",
     "VersionNotSupportedError",
