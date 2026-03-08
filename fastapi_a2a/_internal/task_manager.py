@@ -90,6 +90,7 @@ class TaskManager:
         self._skill_map = {s["id"]: s for s in skills}
         self._timeout = timeout_seconds
         self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._bg_tasks: set[asyncio.Task[Any]] = set()
 
     # ── Public dispatch ───────────────────────────────────────────────────────
 
@@ -119,8 +120,6 @@ class TaskManager:
         # Fire and do not await. Caller gets 'submitted' state immediately.
         # Store strong reference to prevent garbage collection mid-execution (RUF006)
         bg_task = asyncio.create_task(self._execute(task["id"], ctx))
-        if not hasattr(self, "_bg_tasks"):
-            self._bg_tasks = set()
         self._bg_tasks.add(bg_task)
         bg_task.add_done_callback(self._bg_tasks.discard)
         return task
@@ -193,9 +192,14 @@ class TaskManager:
                 f"Unknown skill: {ctx.skill_id!r}. Available: {list(self._skill_map)}"
             )
         payload = ctx.extract_payload()
+        endpoint = skill.get("endpoint")
+        if endpoint is None:
+            raise UnsupportedOperationError(
+                f"Skill {ctx.skill_id!r} has no 'endpoint' defined."
+            )
         response = await self._adapter.call(
             self._app,
-            skill["endpoint"],
+            endpoint,
             payload,
             ctx.auth_headers,
         )

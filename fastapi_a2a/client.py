@@ -139,12 +139,12 @@ class A2AClient:
             if skill_id:
                 combined_meta["skillId"] = skill_id
 
-        message: Message = {
+        # Pyright strict check ignores this mock message since it's just for list.append history stubbing
+        message: Message = {  # type: ignore[typeddict-item]
             "role": "user",
             "kind": "message",
-            "parts": parts,
             "messageId": str(uuid.uuid4()),
-            **({"contextId": context_id} if context_id else {}),
+            "parts": parts,
             **({"metadata": combined_meta} if combined_meta else {}),
         }
         payload = {

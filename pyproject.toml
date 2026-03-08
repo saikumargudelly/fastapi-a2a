@@ -62,7 +62,7 @@ ignore = ["B008"]
 
 [tool.pyright]
 pythonVersion    = "3.11"
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

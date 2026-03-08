@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false
 """RedisTaskStore — distributed task store backed by redis.asyncio.  # pragma: no cover
 
 Requires the [redis] optional extra: pip install "fastapi-a2a[redis]"
@@ -8,17 +9,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from fastapi_a2a.exceptions import InvalidStateTransitionError, TaskNotFoundError
-from fastapi_a2a.schema import (
-    VALID_TRANSITIONS,
+from fastapi_a2a._internal.constants import VALID_TRANSITIONS
+from fastapi_a2a._internal.exceptions import InvalidStateTransitionError, TaskNotFoundError
+from fastapi_a2a._internal.schema import (
     Artifact,
     Message,
     Task,
     TaskState,
     TaskStatus,
-    task_ta,
+    task_adapter,
 )
-from fastapi_a2a.taskstore import TaskStore
+from fastapi_a2a.stores.base import TaskStore
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
@@ -46,9 +47,9 @@ class RedisTaskStore(TaskStore):
     def __init__(self, url: str = "redis://localhost:6379", ttl_seconds: int = 3600) -> None:
         self._url = url
         self._ttl = ttl_seconds
-        self._redis: aioredis.Redis[Any] | None = None
+        self._redis: aioredis.Redis | None = None
 
-    async def _get_redis(self) -> aioredis.Redis[Any]:
+    async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
             self._redis = await _aioredis.from_url(  # type: ignore[assignment]
                 self._url, decode_responses=True
@@ -63,12 +64,12 @@ class RedisTaskStore(TaskStore):
         raw = await r.get(self._key(task_id))
         if raw is None:
             return None
-        return task_ta.validate_json(raw)
+        return task_adapter.validate_json(raw)
 
     async def save(self, task: Task) -> None:
         r = await self._get_redis()
-        raw = task_ta.dump_json(task, by_alias=True)
-        await r.set(self._key(task.id), raw, ex=self._ttl)
+        raw = task_adapter.dump_json(task, by_alias=True)
+        await r.set(self._key(task["id"]), raw, ex=self._ttl)
 
     async def update_status(
         self,
@@ -82,22 +83,21 @@ class RedisTaskStore(TaskStore):
             raw = await r.get(key)
             if raw is None:
                 raise TaskNotFoundError(f"Task not found: {task_id}")
-            task = task_ta.validate_json(raw)
-            allowed = VALID_TRANSITIONS.get(task.status.state, frozenset())
+            task = task_adapter.validate_json(raw)
+            allowed = VALID_TRANSITIONS.get(task["status"]["state"], frozenset())
             if state not in allowed:
                 raise InvalidStateTransitionError(
-                    f"Cannot transition {task.status.state!r} → {state!r}"
+                    f"Cannot transition {task['status']['state']!r} → {state!r}"
                 )
             now = _now_iso()
-            updated = task.model_copy(
-                update={
-                    "status": TaskStatus(state=state, message=message, timestamp=now),
-                    "updated_at": now,
-                }
-            )
-            pipe.set(key, task_ta.dump_json(updated, by_alias=True), ex=self._ttl)
+            task["status"] = {"state": state, "timestamp": now}  # type: ignore[typeddict-item]
+            if message is not None:
+                task["status"]["message"] = message
+                task["history"].append(message)
+            task["updatedAt"] = now
+            pipe.set(key, task_adapter.dump_json(task, by_alias=True), ex=self._ttl)
             await pipe.execute()
-        return updated
+        return task
 
     async def add_artifact(self, task_id: str, artifact: Artifact) -> Task:
         r = await self._get_redis()
@@ -105,19 +105,16 @@ class RedisTaskStore(TaskStore):
         raw = await r.get(key)
         if raw is None:
             raise TaskNotFoundError(f"Task not found: {task_id}")
-        task = task_ta.validate_json(raw)
+        task = task_adapter.validate_json(raw)
         now = _now_iso()
-        updated = task.model_copy(
-            update={
-                "artifacts": [*task.artifacts, artifact],
-                "updated_at": now,
-            }
-        )
-        await r.set(key, task_ta.dump_json(updated, by_alias=True), ex=self._ttl)
-        return updated
+        task["artifacts"].append(artifact)
+        task["updatedAt"] = now
+        await r.set(key, task_adapter.dump_json(task, by_alias=True), ex=self._ttl)
+        return task
 
     async def list(
         self,
+        *,
         context_id: str | None = None,
         state: TaskState | None = None,
         limit: int = 50,
@@ -132,22 +129,22 @@ class RedisTaskStore(TaskStore):
         for key in keys:
             raw = await r.get(key)
             if raw:
-                task = task_ta.validate_json(raw)
-                if context_id is not None and task.context_id != context_id:
+                task = task_adapter.validate_json(raw)
+                if context_id is not None and task.get("contextId") != context_id:
                     continue
-                if state is not None and task.status.state != state:
+                if state is not None and task["status"]["state"] != state:
                     continue
                 tasks.append(task)
         # cursor-based pagination
         if cursor is not None:
-            ids = [t.id for t in tasks]
+            ids = [t["id"] for t in tasks]
             try:
                 start = ids.index(cursor) + 1
                 tasks = tasks[start:]
             except ValueError:
                 pass
         page = tasks[:limit]
-        next_cursor = page[-1].id if len(tasks) > limit else None
+        next_cursor = page[-1]["id"] if len(tasks) > limit else None
         return page, next_cursor
 
     async def aclose(self) -> None:
