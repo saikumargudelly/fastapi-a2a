@@ -13,9 +13,10 @@ Design rules:
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, TypeAdapter
+from typing_extensions import NotRequired, TypedDict
 
 from fastapi_a2a._internal.constants import TaskState
 
