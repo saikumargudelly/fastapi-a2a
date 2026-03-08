@@ -77,3 +77,7 @@ site/
 *.md'
 "fastapi-a2a-erd-final*"
 tests_critical/
+
+# Project specific ignores
+log.zip
+uv.lock
