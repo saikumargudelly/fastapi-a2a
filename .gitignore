@@ -80,4 +80,5 @@ tests_critical/
 
 # Project specific ignores
 log.zip
+logs.zip
 uv.lock
