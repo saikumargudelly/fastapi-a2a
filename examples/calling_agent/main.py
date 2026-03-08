@@ -5,6 +5,7 @@ Install and run:
     pip install fastapi-a2a uvicorn
     uvicorn main:app --reload
 """
+
 from fastapi import FastAPI
 
 from fastapi_a2a import A2AClient
@@ -34,8 +35,6 @@ async def pipeline(req: dict) -> dict:
         )
 
     translation = (
-        task["artifacts"][0]["parts"][0]["data"].get("translated", "")
-        if task["artifacts"]
-        else ""
+        task["artifacts"][0]["parts"][0]["data"].get("translated", "") if task["artifacts"] else ""
     )
     return {"summary": summary, "translation": translation}

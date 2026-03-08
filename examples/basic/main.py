@@ -12,6 +12,7 @@ Install and run:
     pip install fastapi-a2a uvicorn
     uvicorn main:app --reload
 """
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 

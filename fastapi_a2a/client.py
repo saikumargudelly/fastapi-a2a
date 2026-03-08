@@ -139,7 +139,8 @@ class A2AClient:
             if skill_id:
                 combined_meta["skillId"] = skill_id
 
-        # Pyright strict check ignores this mock message since it's just for list.append history stubbing
+        # Pyright strict check ignores this mock message since it's just
+        # for list.append history stubbing
         message: Message = {  # type: ignore[typeddict-item]
             "role": "user",
             "kind": "message",

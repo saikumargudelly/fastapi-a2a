@@ -7,7 +7,7 @@ Requires the [redis] optional extra: pip install "fastapi-a2a[redis]"
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from fastapi_a2a._internal.constants import VALID_TRANSITIONS
 from fastapi_a2a._internal.exceptions import InvalidStateTransitionError, TaskNotFoundError
@@ -16,7 +16,6 @@ from fastapi_a2a._internal.schema import (
     Message,
     Task,
     TaskState,
-    TaskStatus,
     task_adapter,
 )
 from fastapi_a2a.stores.base import TaskStore

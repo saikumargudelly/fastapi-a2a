@@ -15,9 +15,10 @@ Install and run:
     pip install fastapi-a2a uvicorn
     uvicorn main:app --reload
 """
+
 from fastapi import FastAPI
 
-from fastapi_a2a import FastApiA2A, InvalidStateTransitionError, TaskStore, a2a_skill
+from fastapi_a2a import FastApiA2A, TaskStore, a2a_skill
 from fastapi_a2a._internal.schema import Artifact, Message, Task, TaskState
 from fastapi_a2a._internal.utils import utcnow  # always use this for timestamps
 
@@ -43,6 +44,7 @@ class MyPostgresTaskStore(TaskStore):
     async def create(self, context_id: str, message: Message) -> Task:
         now = utcnow()
         import uuid
+
         task: Task = {
             "id": str(uuid.uuid4()),
             "contextId": context_id,
@@ -98,7 +100,7 @@ a2a = FastApiA2A(
     app,
     name="Classifier Agent",
     url="https://classifier.example.com",
-    store=MyPostgresTaskStore(),   # ← plug in your own store
+    store=MyPostgresTaskStore(),  # ← plug in your own store
 )
 a2a.mount()
 

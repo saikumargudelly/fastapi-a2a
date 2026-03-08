@@ -194,9 +194,7 @@ class TaskManager:
         payload = ctx.extract_payload()
         endpoint = skill.get("endpoint")
         if endpoint is None:
-            raise UnsupportedOperationError(
-                f"Skill {ctx.skill_id!r} has no 'endpoint' defined."
-            )
+            raise UnsupportedOperationError(f"Skill {ctx.skill_id!r} has no 'endpoint' defined.")
         response = await self._adapter.call(
             self._app,
             endpoint,
