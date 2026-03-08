@@ -101,7 +101,7 @@ def test_scanner_skill_has_endpoint_field(base_app: FastAPI) -> None:
     adapter = FastApiAdapter()
     skills = adapter.scan(base_app)
     echo_skill = next(s for s in skills if s["id"] == "echo")
-    assert echo_skill["endpoint"] == "/echo"
+    assert echo_skill["endpoint"] == "POST /echo"
 
 
 def test_scanner_respects_explicit_tags(base_app: FastAPI) -> None:

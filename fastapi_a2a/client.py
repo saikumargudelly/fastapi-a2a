@@ -44,8 +44,30 @@ class A2AClient:
         card_ttl_seconds: int = 300,
         # FIX B7: bounded polling — prevents infinite polling on hung remote agents
         poll_timeout_seconds: float = 300.0,
+        allowed_hosts: list[str] | None = None,
+        allow_internal_ips: bool = False,
     ) -> None:
         self._base_url = base_url.rstrip("/")
+
+        import ipaddress
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self._base_url)
+        hostname = parsed.hostname or ""
+
+        if allowed_hosts is not None and hostname not in allowed_hosts:
+            raise ValueError(f"Host {hostname} not in allowed A2A interactions")
+
+        if not allow_internal_ips:
+            if hostname == "localhost":
+                raise ValueError("Private IP routing via A2AClient is restricted.")
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private or ip.is_loopback:
+                    raise ValueError("Private IP routing via A2AClient is restricted.")
+            except ValueError as e:
+                if "Private IP routing" in str(e):
+                    raise
         self._auth_token = auth_token
         self._timeout = timeout_seconds
         self._card_ttl = card_ttl_seconds
@@ -53,13 +75,33 @@ class A2AClient:
         self._card_cache: AgentCard | None = None
         self._card_fetched: float = 0.0
         self._http: httpx.AsyncClient | None = None
+        self._allow_internal = allow_internal_ips
 
     async def __aenter__(self) -> A2AClient:
+        import ipaddress
+        import socket
+        from urllib.parse import urlparse
+
+        def _secure_resolve(hostname: str) -> str:
+            ip = socket.gethostbyname(hostname)
+            if not self._allow_internal:
+                addr = ipaddress.ip_address(ip)
+                if addr.is_private or addr.is_loopback:
+                    raise ValueError("SSRF Blocked: Resolves to private IP.")
+            return ip
+
+        parsed = urlparse(self._base_url)
+        # Fast local host mapping override if a custom HTTP transport approach isn't available
+        # Directing the exact base_url to the resolved IP while injecting a Host Header natively patches 90% of requests
+        resolved_ip = _secure_resolve(parsed.hostname or "")
+        safe_url = self._base_url.replace(parsed.hostname or "", resolved_ip)
+
         self._http = httpx.AsyncClient(
-            base_url=self._base_url,
+            base_url=safe_url,
             timeout=self._timeout,
             headers=self._default_headers(),
         )
+        self._http.headers["Host"] = parsed.hostname or ""
         return self
 
     async def __aexit__(self, *_: Any) -> None:

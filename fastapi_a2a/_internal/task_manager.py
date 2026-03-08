@@ -103,6 +103,9 @@ class TaskManager:
         Accept an incoming message, create a task, fire-and-forget execution.
         FIX D2: 'message' key validated by caller before reaching this method.
         """
+        if len(self._bg_tasks) >= self._semaphore._value * 2:
+            raise UnsupportedOperationError("Task queue overloaded. Please try again later.")
+
         message: Message = params["message"]
         context_id = message.get("contextId") or str(uuid.uuid4())
         if not message.get("messageId"):
@@ -180,9 +183,18 @@ class TaskManager:
             except A2AError as exc:
                 log.warning("Task %s failed with A2AError: %s", task_id, exc)
                 await self._store.update_status(task_id, "failed")
-            except Exception:
+            except Exception as exc:
                 # FIX B4: catch-all MUST log; silent swallow was a debugging nightmare.
                 log.exception("Task %s failed with unexpected error", task_id)
+                error_artifact: Artifact = {
+                    "artifactId": str(uuid.uuid4()),
+                    "name": "Internal Error",
+                    "parts": [
+                        {"kind": "text", "text": "Task failed due to an internal system error."}
+                    ],
+                    "metadata": {"errorType": type(exc).__name__},
+                }
+                await self._store.add_artifact(task_id, error_artifact)
                 await self._store.update_status(task_id, "failed")
 
     async def _call_skill(self, ctx: RequestContext) -> list[Artifact]:

@@ -33,6 +33,7 @@ class InMemoryTaskStore(TaskStore):
         self._tasks: dict[str, Task] = {}
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._expires: dict[str, float] = {}
+        self._expiration_heap: list[tuple[float, str]] = []
         self._ttl = ttl_seconds
         self._evictor: asyncio.Task | None = None
 
@@ -52,16 +53,27 @@ class InMemoryTaskStore(TaskStore):
                 pass
 
     async def _evict_loop(self) -> None:
+        from heapq import heappop
+
         while True:
-            await asyncio.sleep(60)
             now = time.monotonic()
-            stale = [tid for tid, exp in list(self._expires.items()) if exp < now]
-            for tid in stale:
-                self._tasks.pop(tid, None)
-                self._locks.pop(tid, None)
-                self._expires.pop(tid, None)
-            if stale:
-                log.debug("InMemoryTaskStore evicted %d expired tasks", len(stale))
+            evicted_count = 0
+            while self._expiration_heap and self._expiration_heap[0][0] < now:
+                exp, tid = heappop(self._expiration_heap)
+                if self._expires.get(tid) == exp:
+                    async with self._locks[tid]:
+                        self._tasks.pop(tid, None)
+                        self._expires.pop(tid, None)
+                        evicted_count += 1
+                    self._locks.pop(tid, None)
+
+            if evicted_count > 0:
+                log.debug("InMemoryTaskStore evicted %d expired tasks", evicted_count)
+
+            sleep_time = 60.0
+            if self._expiration_heap:
+                sleep_time = max(0.1, self._expiration_heap[0][0] - time.monotonic())
+            await asyncio.sleep(min(sleep_time, 60.0))
 
     # ── TaskStore ABC ─────────────────────────────────────────────────────────
 
@@ -79,7 +91,11 @@ class InMemoryTaskStore(TaskStore):
             "updatedAt": now,
         }
         self._tasks[task_id] = task
-        self._expires[task_id] = time.monotonic() + self._ttl
+        exp = time.monotonic() + self._ttl
+        self._expires[task_id] = exp
+        from heapq import heappush
+
+        heappush(self._expiration_heap, (exp, task_id))
         return task
 
     async def get(self, task_id: str) -> Task | None:
@@ -107,7 +123,11 @@ class InMemoryTaskStore(TaskStore):
             if message is not None:
                 task["history"].append(message)
             task["updatedAt"] = now
-            self._expires[task_id] = time.monotonic() + self._ttl
+            exp = time.monotonic() + self._ttl
+            self._expires[task_id] = exp
+            from heapq import heappush
+
+            heappush(self._expiration_heap, (exp, task_id))
             return task
 
     async def add_artifact(self, task_id: str, artifact: Artifact) -> Task:
