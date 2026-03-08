@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from fastapi_a2a import FastApiA2A, a2a_skill
 
@@ -71,7 +71,9 @@ async def test_tasks_get_unknown_returns_error(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_tasks_cancel_terminal_returns_error(client: AsyncClient, rpc_send_payload: dict) -> None:
+async def test_tasks_cancel_terminal_returns_error(
+    client: AsyncClient, rpc_send_payload: dict
+) -> None:
     send_resp = await client.post("/a2a/rpc", json=rpc_send_payload)
     task_id = send_resp.json()["result"]["id"]
     await asyncio.sleep(0.3)  # let the task complete

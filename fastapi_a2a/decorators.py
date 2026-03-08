@@ -1,19 +1,18 @@
 """
 The entry point for exposing skills.
 
-This decorator (`@a2a_skill`) is the literal mechanism that turns a standard 
-FastAPI route into an A2A-discoverable skill. 
+This decorator (`@a2a_skill`) is the literal mechanism that turns a standard
+FastAPI route into an A2A-discoverable skill.
 
-We deliberately designed this to be completely passive. It doesn't wrap the 
-execution of your function or alter its inputs/outputs. It simply tags the 
+We deliberately designed this to be completely passive. It doesn't wrap the
+execution of your function or alter its inputs/outputs. It simply tags the
 function object with a `_a2a_skill` dictionary containing the metadata.
 
-Later, when `a2a.mount()` is called, our internal scanner hunts down these tags 
+Later, when `a2a.mount()` is called, our internal scanner hunts down these tags
 and wires them up without disturbing your original routes.
 """
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from typing import Any, TypeVar
 

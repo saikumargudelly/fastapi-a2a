@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from fastapi_a2a._internal.schema import Artifact, Message, Task
 from fastapi_a2a._internal.constants import TaskState
+from fastapi_a2a._internal.schema import Artifact, Message, Task
 
 
 class TaskStore(ABC):
@@ -37,19 +37,21 @@ class TaskStore(ABC):
     # FIX B1: start/stop now declared on the ABC so any custom implementation
     # author sees them. Default: no-op.
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # noqa: B027
         """
         Called once on application startup.
         Override to start background tasks, open connection pools, etc.
         Default: no-op.
         """
+        pass
 
-    async def stop(self) -> None:
+    async def stop(self) -> None:  # noqa: B027
         """
         Called once on application shutdown.
         Override to cancel background tasks, close connections, etc.
         Default: no-op.
         """
+        pass
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
 

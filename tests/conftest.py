@@ -17,7 +17,6 @@ from pydantic import BaseModel
 
 from fastapi_a2a import FastApiA2A, a2a_skill
 
-
 # ── Module-level request models ───────────────────────────────────────────────
 # Must be at module level so FastAPI sees them as JSON body parameters.
 

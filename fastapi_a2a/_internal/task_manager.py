@@ -15,16 +15,16 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi_a2a.stores.base import TaskStore
-from fastapi_a2a.adapters.base import BaseAdapter
-from fastapi_a2a._internal.schema import Task, Message, Artifact, AgentSkill
 from fastapi_a2a._internal.constants import TERMINAL_STATES
 from fastapi_a2a._internal.exceptions import (
     A2AError,
-    TaskNotFoundError,
     TaskNotCancelableError,
+    TaskNotFoundError,
     UnsupportedOperationError,
 )
+from fastapi_a2a._internal.schema import AgentSkill, Artifact, Message, Task
+from fastapi_a2a.adapters.base import BaseAdapter
+from fastapi_a2a.stores.base import TaskStore
 
 log = logging.getLogger(__name__)
 
@@ -36,8 +36,14 @@ class RequestContext:
     Passed down to the adapter's call().
     """
 
-    __slots__ = ("task_id", "context_id", "message", "skill_id",
-                 "auth_headers", "metadata")
+    __slots__ = (
+        "auth_headers",
+        "context_id",
+        "message",
+        "metadata",
+        "skill_id",
+        "task_id",
+    )
 
     def __init__(
         self,
@@ -111,7 +117,12 @@ class TaskManager:
             metadata=params.get("metadata"),
         )
         # Fire and do not await. Caller gets 'submitted' state immediately.
-        asyncio.create_task(self._execute(task["id"], ctx))
+        # Store strong reference to prevent garbage collection mid-execution (RUF006)
+        bg_task = asyncio.create_task(self._execute(task["id"], ctx))
+        if not hasattr(self, "_bg_tasks"):
+            self._bg_tasks = set()
+        self._bg_tasks.add(bg_task)
+        bg_task.add_done_callback(self._bg_tasks.discard)
         return task
 
     async def get_task(self, task_id: str) -> Task:

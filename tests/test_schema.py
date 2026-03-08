@@ -5,27 +5,18 @@ import pytest
 
 from fastapi_a2a._internal.schema import (
     AgentCard,
-    AgentCapabilities,
     AgentSkill,
-    Artifact,
-    DataPart,
     FileWithBytes,
-    FileWithUri,
-    FilePart,
     Message,
     OAuthFlows,
-    Part,
     SecurityScheme,
     Task,
-    TaskStatus,
-    TextPart,
     agent_card_adapter,
     message_adapter,
     part_adapter,
     rpc_request_adapter,
     task_adapter,
 )
-
 
 # ── Part discriminated union ───────────────────────────────────────────────────
 

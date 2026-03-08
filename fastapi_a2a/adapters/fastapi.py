@@ -13,9 +13,9 @@ import httpx
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from fastapi_a2a.adapters.base import BaseAdapter
+from fastapi_a2a._internal.exceptions import A2AInternalError
 from fastapi_a2a._internal.schema import AgentSkill
-from fastapi_a2a._internal.exceptions import A2AError, A2AInternalError, UnsupportedOperationError
+from fastapi_a2a.adapters.base import BaseAdapter
 
 
 class FastApiAdapter(BaseAdapter):

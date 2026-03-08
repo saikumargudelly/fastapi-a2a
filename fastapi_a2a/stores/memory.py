@@ -15,14 +15,14 @@ import time
 import uuid
 from collections import defaultdict
 
-from fastapi_a2a.stores.base import TaskStore
-from fastapi_a2a._internal.schema import Artifact, Message, Task, TaskStatus
-from fastapi_a2a._internal.constants import VALID_TRANSITIONS, TERMINAL_STATES, TaskState
+from fastapi_a2a._internal.constants import TERMINAL_STATES, VALID_TRANSITIONS, TaskState
 from fastapi_a2a._internal.exceptions import (
     InvalidStateTransitionError,
     TaskNotFoundError,
 )
+from fastapi_a2a._internal.schema import Artifact, Message, Task, TaskStatus
 from fastapi_a2a._internal.utils import utcnow  # FIX F1: shared utility
+from fastapi_a2a.stores.base import TaskStore
 
 log = logging.getLogger(__name__)
 

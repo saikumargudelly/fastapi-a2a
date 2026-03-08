@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import logging
 
+from fastapi_a2a._internal.constants import PROTOCOL_VERSION
 from fastapi_a2a._internal.schema import (
-    AgentCard,
     AgentCapabilities,
+    AgentCard,
     AgentProvider,
     AgentSkill,
     agent_card_adapter,
 )
-from fastapi_a2a._internal.constants import PROTOCOL_VERSION
 
 log = logging.getLogger(__name__)
 

@@ -1,15 +1,15 @@
 """
 The outbound communication layer for fastapi-a2a.
 
-While the plugin (`FastApiA2A`) is about exposing *your* app to the world, 
+While the plugin (`FastApiA2A`) is about exposing *your* app to the world,
 the `A2AClient` is about letting your app talk to *others*.
 
 It's designed to be completely framework-agnostic on the remote end. Your FastAPI
 application can use this client to trigger tasks on a completely different system
-(like a Ruby on Rails app or a Go microservice), as long as they speak the A2A 
+(like a Ruby on Rails app or a Go microservice), as long as they speak the A2A
 protocol.
 
-Usage is heavily optimised for standard async/await patterns, so delegating a 
+Usage is heavily optimised for standard async/await patterns, so delegating a
 task to an external AI agent feels just like calling a local async function.
 """
 from __future__ import annotations
@@ -21,6 +21,8 @@ from typing import Any
 
 import httpx
 
+from fastapi_a2a._internal.constants import PROTOCOL_VERSION, TERMINAL_STATES
+from fastapi_a2a._internal.exceptions import A2ARemoteError
 from fastapi_a2a._internal.schema import (
     AgentCard,
     Message,
@@ -29,8 +31,6 @@ from fastapi_a2a._internal.schema import (
     message_adapter,
     task_adapter,
 )
-from fastapi_a2a._internal.exceptions import A2ARemoteError
-from fastapi_a2a._internal.constants import PROTOCOL_VERSION, TERMINAL_STATES
 
 
 class A2AClient:
@@ -54,7 +54,7 @@ class A2AClient:
         self._card_fetched: float = 0.0
         self._http: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "A2AClient":
+    async def __aenter__(self) -> A2AClient:
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=self._timeout,

@@ -8,7 +8,7 @@ preserving correct sort order in TaskStore.list() across implementations.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utcnow() -> str:
@@ -21,4 +21,4 @@ def utcnow() -> str:
     status.timestamp). Consistent formatting is required for correct
     lexicographic sort in TaskStore.list().
     """
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"

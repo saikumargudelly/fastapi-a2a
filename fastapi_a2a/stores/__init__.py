@@ -2,4 +2,4 @@
 from fastapi_a2a.stores.base import TaskStore
 from fastapi_a2a.stores.memory import InMemoryTaskStore
 
-__all__ = ["TaskStore", "InMemoryTaskStore"]
+__all__ = ["InMemoryTaskStore", "TaskStore"]

@@ -12,11 +12,11 @@ Design rules:
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Any, Literal, NotRequired, TypedDict, Union
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from pydantic import Field, TypeAdapter
 
-from fastapi_a2a._internal.constants import TaskState  # noqa: F401 — re-exported
+from fastapi_a2a._internal.constants import TaskState
 
 # ── Agent identity ─────────────────────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ class TextPart(TypedDict):
 
 class FilePart(TypedDict):
     kind: Literal["file"]
-    file: Union[FileWithBytes, FileWithUri]
+    file: FileWithBytes | FileWithUri
     metadata: NotRequired[dict[str, Any]]
 
 
@@ -118,7 +118,7 @@ class DataPart(TypedDict):
 
 
 Part = Annotated[
-    Union[TextPart, FilePart, DataPart],
+    TextPart | FilePart | DataPart,
     Field(discriminator="kind"),
 ]
 
@@ -187,20 +187,20 @@ class JSONRPCError(TypedDict):
 
 class JSONRPCRequest(TypedDict):
     jsonrpc: Literal["2.0"]
-    id: Union[int, str, None]
+    id: int | str | None
     method: str
     params: NotRequired[dict[str, Any]]
 
 
 class JSONRPCSuccessResponse(TypedDict):
     jsonrpc: Literal["2.0"]
-    id: Union[int, str, None]
+    id: int | str | None
     result: Any
 
 
 class JSONRPCErrorResponse(TypedDict):
     jsonrpc: Literal["2.0"]
-    id: Union[int, str, None]
+    id: int | str | None
     error: JSONRPCError
 
 

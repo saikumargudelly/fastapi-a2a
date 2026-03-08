@@ -5,20 +5,18 @@ Requires the [redis] optional extra: pip install "fastapi-a2a[redis]"
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi_a2a.exceptions import InvalidStateTransitionError, TaskNotFoundError
 from fastapi_a2a.schema import (
+    VALID_TRANSITIONS,
     Artifact,
     Message,
     Task,
     TaskState,
     TaskStatus,
-    VALID_TRANSITIONS,
     task_ta,
-    artifact_ta,
 )
 from fastapi_a2a.taskstore import TaskStore
 
@@ -35,7 +33,7 @@ except ImportError as exc:  # pragma: no cover
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 class RedisTaskStore(TaskStore):

@@ -5,11 +5,9 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-from fastapi_a2a import A2AClient, FastApiA2A, a2a_skill
-from fastapi_a2a._internal.exceptions import A2ARemoteError
 from pydantic import BaseModel
 
+from fastapi_a2a import A2AClient, FastApiA2A, a2a_skill
 
 # ── Module-level model so FastAPI resolves it as JSON body ────────────────────
 
@@ -71,7 +69,6 @@ async def test_client_default_headers(agent_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_client_get_card_cached(agent_client: AsyncClient) -> None:
     """Card is cached for card_ttl_seconds."""
-    from fastapi_a2a._internal.schema import agent_card_adapter
     resp = await agent_client.get("/.well-known/agent.json")
     assert resp.status_code == 200
 
@@ -158,7 +155,6 @@ async def test_tasks_list_via_agent(agent_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_client_poll_timeout_raises() -> None:
     """FIX B7: poll_timeout_seconds 0 should raise TimeoutError immediately."""
-    import asyncio, time
     from unittest.mock import AsyncMock, patch
 
     client = A2AClient("https://x.com", poll_timeout_seconds=0.01)

@@ -1,12 +1,12 @@
 """
 The heart of fastapi-a2a.
 
-This module houses the `FastApiA2A` class, which acts as the main orchestration 
+This module houses the `FastApiA2A` class, which acts as the main orchestration
 layer between the user's existing FastAPI application and the A2A protocol.
 
-The design philosophy here is strictly "opt-in and non-destructive". When a developer 
-calls `a2a.mount()`, we shouldn't mess with their existing route topology or middleware 
-stack. Instead, we quietly slip in via the ASGI interface to handle the specific 
+The design philosophy here is strictly "opt-in and non-destructive". When a developer
+calls `a2a.mount()`, we shouldn't mess with their existing route topology or middleware
+stack. Instead, we quietly slip in via the ASGI interface to handle the specific
 `/.well-known/agent.json` and `/a2a/rpc` endpoints.
 
 This ensures that adopting the A2A spec feels like attaching a sidecar to the application,
@@ -20,6 +20,15 @@ from typing import Any
 
 from fastapi import FastAPI, Request, Response
 
+from fastapi_a2a._internal.card import AgentCardBuilder
+from fastapi_a2a._internal.constants import (
+    INTERNAL_ERROR,
+    INVALID_PARAMS,
+    METHOD_NOT_FOUND,
+    PARSE_ERROR,
+    SUPPORTED_VERSIONS,
+)
+from fastapi_a2a._internal.exceptions import A2AError
 from fastapi_a2a._internal.schema import (
     AgentCapabilities,
     AgentProvider,
@@ -28,18 +37,9 @@ from fastapi_a2a._internal.schema import (
     task_adapter,
 )
 from fastapi_a2a._internal.task_manager import TaskManager
-from fastapi_a2a._internal.card import AgentCardBuilder
-from fastapi_a2a._internal.exceptions import A2AError, VersionNotSupportedError
-from fastapi_a2a._internal.constants import (
-    SUPPORTED_VERSIONS,
-    PARSE_ERROR,
-    METHOD_NOT_FOUND,
-    INVALID_PARAMS,
-    INTERNAL_ERROR,
-)
+from fastapi_a2a.adapters.fastapi import FastApiAdapter
 from fastapi_a2a.stores.base import TaskStore
 from fastapi_a2a.stores.memory import InMemoryTaskStore
-from fastapi_a2a.adapters.fastapi import FastApiAdapter
 
 log = logging.getLogger(__name__)
 
