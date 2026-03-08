@@ -1,4 +1,5 @@
 """Tests for the FastApiA2A plugin — card, RPC, lifecycle, double-mount."""
+
 from __future__ import annotations
 
 import asyncio
@@ -51,8 +52,10 @@ async def test_tasks_get_returns_task(client: AsyncClient, rpc_send_payload: dic
     task_id = send_resp.json()["result"]["id"]
 
     get_payload = {
-        "jsonrpc": "2.0", "id": "2",
-        "method": "tasks/get", "params": {"id": task_id},
+        "jsonrpc": "2.0",
+        "id": "2",
+        "method": "tasks/get",
+        "params": {"id": task_id},
     }
     get_resp = await client.post("/a2a/rpc", json=get_payload)
     assert get_resp.json()["result"]["id"] == task_id
@@ -61,8 +64,10 @@ async def test_tasks_get_returns_task(client: AsyncClient, rpc_send_payload: dic
 @pytest.mark.asyncio
 async def test_tasks_get_unknown_returns_error(client: AsyncClient) -> None:
     payload = {
-        "jsonrpc": "2.0", "id": "1",
-        "method": "tasks/get", "params": {"id": "nonexistent"},
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": "tasks/get",
+        "params": {"id": "nonexistent"},
     }
     resp = await client.post("/a2a/rpc", json=payload)
     body = resp.json()
@@ -79,16 +84,20 @@ async def test_tasks_cancel_terminal_returns_error(
     await asyncio.sleep(0.3)  # let the task complete
 
     get_payload = {
-        "jsonrpc": "2.0", "id": "g",
-        "method": "tasks/get", "params": {"id": task_id},
+        "jsonrpc": "2.0",
+        "id": "g",
+        "method": "tasks/get",
+        "params": {"id": task_id},
     }
     get_resp = await client.post("/a2a/rpc", json=get_payload)
     state = get_resp.json()["result"]["status"]["state"]
 
     if state == "completed":
         cancel_payload = {
-            "jsonrpc": "2.0", "id": "c",
-            "method": "tasks/cancel", "params": {"id": task_id},
+            "jsonrpc": "2.0",
+            "id": "c",
+            "method": "tasks/cancel",
+            "params": {"id": task_id},
         }
         cancel_resp = await client.post("/a2a/rpc", json=cancel_payload)
         assert cancel_resp.json()["error"]["code"] == -32002

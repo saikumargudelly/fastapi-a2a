@@ -1,4 +1,5 @@
 """Tests for the TypedDict schema models and Pydantic TypeAdapters."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,6 +20,7 @@ from fastapi_a2a._internal.schema import (
 )
 
 # ── Part discriminated union ───────────────────────────────────────────────────
+
 
 def test_text_part_validates() -> None:
     raw = {"kind": "text", "text": "hello"}
@@ -50,11 +52,13 @@ def test_file_part_with_uri_validates() -> None:
 
 def test_invalid_part_kind_rejected() -> None:
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         part_adapter.validate_python({"kind": "unknown", "text": "x"})
 
 
 # ── FIX A4: FileWithBytes.content (was bytes) ─────────────────────────────────
+
 
 def test_file_with_bytes_uses_content_field() -> None:
     """FIX A4: field name is 'content', not 'bytes' which shadowed built-in."""
@@ -64,6 +68,7 @@ def test_file_with_bytes_uses_content_field() -> None:
 
 
 # ── AgentCard serialisation ────────────────────────────────────────────────────
+
 
 def test_agent_card_round_trip() -> None:
     card: AgentCard = {
@@ -120,12 +125,14 @@ def test_agent_skill_endpoint_not_in_cleaned_card() -> None:
     )
     card_bytes = builder.build_bytes()
     import json
+
     card_json = json.loads(card_bytes)
     assert "endpoint" not in card_json["skills"][0]
     assert "_endpoint" not in card_json["skills"][0]
 
 
 # ── FIX E1: SecurityScheme and OAuthFlows are typed ───────────────────────────
+
 
 def test_security_scheme_typed_dict() -> None:
     scheme: SecurityScheme = {
@@ -150,6 +157,7 @@ def test_oauth_flows_typed_dict() -> None:
 
 # ── JSON-RPC payload parsing ───────────────────────────────────────────────────
 
+
 def test_rpc_request_validates() -> None:
     raw = b'{"jsonrpc":"2.0","id":"1","method":"tasks/get","params":{"id":"x"}}'
     rpc = rpc_request_adapter.validate_json(raw)
@@ -159,11 +167,13 @@ def test_rpc_request_validates() -> None:
 
 def test_rpc_parse_error_on_bad_json() -> None:
     from pydantic import ValidationError
+
     with pytest.raises((ValidationError, Exception)):
         rpc_request_adapter.validate_json(b"not json!!")
 
 
 # ── Message validation ─────────────────────────────────────────────────────────
+
 
 def test_message_round_trip() -> None:
     msg: Message = {
@@ -180,8 +190,10 @@ def test_message_round_trip() -> None:
 
 # ── Task validation ────────────────────────────────────────────────────────────
 
+
 def test_task_structure() -> None:
     from fastapi_a2a._internal.utils import utcnow
+
     now = utcnow()
     task: Task = {
         "id": "t1",

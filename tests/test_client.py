@@ -1,4 +1,5 @@
 """Tests for A2AClient against a live in-process test agent."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,11 +12,13 @@ from fastapi_a2a import A2AClient, FastApiA2A, a2a_skill
 
 # ── Module-level model so FastAPI resolves it as JSON body ────────────────────
 
+
 class EchoReq(BaseModel):
     text: str
 
 
 # ── Test agent ────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def echo_agent() -> FastAPI:
@@ -41,9 +44,11 @@ async def agent_client(echo_agent: FastAPI) -> AsyncClient:
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_client_get_card(agent_client: AsyncClient) -> None:
     from fastapi_a2a._internal.schema import agent_card_adapter
+
     resp = await agent_client.get("/.well-known/agent.json")
     card = agent_card_adapter.validate_json(resp.content)
     assert card["name"] == "Echo Agent"
@@ -114,8 +119,10 @@ async def test_full_send_and_get_cycle(agent_client: AsyncClient) -> None:
     # Poll to completion
     for _ in range(20):
         get_payload = {
-            "jsonrpc": "2.0", "id": "2",
-            "method": "tasks/get", "params": {"id": task_id},
+            "jsonrpc": "2.0",
+            "id": "2",
+            "method": "tasks/get",
+            "params": {"id": task_id},
         }
         get_resp = await agent_client.post("/a2a/rpc", json=get_payload)
         state = get_resp.json()["result"]["status"]["state"]
@@ -133,11 +140,14 @@ async def test_tasks_list_via_agent(agent_client: AsyncClient) -> None:
     """FIX B8: tasks/list is callable via the protocol."""
     # Create a task first
     send_payload = {
-        "jsonrpc": "2.0", "id": "s",
+        "jsonrpc": "2.0",
+        "id": "s",
         "method": "message/send",
         "params": {
             "message": {
-                "role": "user", "kind": "message", "messageId": "m1",
+                "role": "user",
+                "kind": "message",
+                "messageId": "m1",
                 "parts": [{"kind": "data", "data": {"text": "hi"}}],
                 "metadata": {"skillId": "echo"},
             }
@@ -162,11 +172,16 @@ async def test_client_poll_timeout_raises() -> None:
 
     # Mock get_task to always return 'submitted'
     from fastapi_a2a._internal.utils import utcnow
+
     submitted_task = {
-        "id": "t1", "contextId": "c1", "kind": "task",
+        "id": "t1",
+        "contextId": "c1",
+        "kind": "task",
         "status": {"state": "submitted", "timestamp": utcnow()},
-        "history": [], "artifacts": [],
-        "createdAt": utcnow(), "updatedAt": utcnow(),
+        "history": [],
+        "artifacts": [],
+        "createdAt": utcnow(),
+        "updatedAt": utcnow(),
     }
     with patch.object(client, "get_task", AsyncMock(return_value=submitted_task)):
         with pytest.raises(TimeoutError):

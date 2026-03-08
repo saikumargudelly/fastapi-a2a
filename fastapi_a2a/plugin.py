@@ -12,6 +12,7 @@ stack. Instead, we quietly slip in via the ASGI interface to handle the specific
 This ensures that adopting the A2A spec feels like attaching a sidecar to the application,
 rather than rewriting the core engine.
 """
+
 from __future__ import annotations
 
 import json
@@ -127,19 +128,20 @@ class FastApiA2A:
         Calling twice raises RuntimeError.
         """
         if self._is_mounted:
-            raise RuntimeError(
-                "FastApiA2A.mount() already called on this application."
-            )
+            raise RuntimeError("FastApiA2A.mount() already called on this application.")
 
         # Register lifespan events
         self._app.add_event_handler("startup", self._on_startup)
         self._app.add_event_handler("shutdown", self._on_shutdown)
 
         # FIX B3: reuse self._adapter — do NOT construct a second instance
-        self._adapter.mount(self._app, [
-            ("/.well-known/agent.json", self._handle_card, ["GET"]),
-            (f"{self._prefix}/rpc", self._handle_rpc, ["POST"]),
-        ])
+        self._adapter.mount(
+            self._app,
+            [
+                ("/.well-known/agent.json", self._handle_card, ["GET"]),
+                (f"{self._prefix}/rpc", self._handle_rpc, ["POST"]),
+            ],
+        )
         self._is_mounted = True
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -186,7 +188,8 @@ class FastApiA2A:
                     # FIX D2: validate required key before delegation
                     if "message" not in params:
                         return self._error_response(
-                            rpc_id, INVALID_PARAMS,
+                            rpc_id,
+                            INVALID_PARAMS,
                             "params.message is required for message/send",
                         )
                     task = await self._manager.send_message(params, headers)
@@ -199,7 +202,8 @@ class FastApiA2A:
                     # FIX D1: validate 'id' — was bare KeyError → INTERNAL_ERROR
                     if "id" not in params or not isinstance(params["id"], str):
                         return self._error_response(
-                            rpc_id, INVALID_PARAMS,
+                            rpc_id,
+                            INVALID_PARAMS,
                             "params.id (string) is required for tasks/get",
                         )
                     task = await self._manager.get_task(params["id"])
@@ -212,7 +216,8 @@ class FastApiA2A:
                     # FIX D1: same validation as tasks/get
                     if "id" not in params or not isinstance(params["id"], str):
                         return self._error_response(
-                            rpc_id, INVALID_PARAMS,
+                            rpc_id,
+                            INVALID_PARAMS,
                             "params.id (string) is required for tasks/cancel",
                         )
                     task = await self._manager.cancel_task(params["id"])
@@ -266,10 +271,12 @@ class FastApiA2A:
         return Response(content=body, media_type="application/json")
 
     def _error_response(self, rpc_id: Any, code: int, message: str) -> Response:
-        body = json.dumps({
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "error": {"code": code, "message": message},
-        })
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": code, "message": message},
+            }
+        )
         # JSON-RPC errors are always HTTP 200 — status is in the error body
         return Response(content=body, media_type="application/json", status_code=200)

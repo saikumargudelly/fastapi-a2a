@@ -22,6 +22,7 @@ Lifecycle (FIX B1):
   - Default implementations are no-ops. Override for eviction loops, pools, etc.
   - FastApiA2A calls start()/stop() unconditionally — no isinstance check.  [FIX B2]
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

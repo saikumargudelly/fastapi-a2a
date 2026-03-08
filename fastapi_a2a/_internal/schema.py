@@ -10,6 +10,7 @@ Design rules:
 - FIX A4: FileWithBytes.content (was bytes — shadowed the built-in).
 - FIX E1: SecurityScheme and OAuthFlows are now fully typed TypedDicts.
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
@@ -40,17 +41,18 @@ class AgentSkill(TypedDict):
     outputModes: list[str]
     tags: NotRequired[list[str]]
     examples: NotRequired[list[str]]
-    endpoint: NotRequired[str]          # internal routing — stripped before wire
+    endpoint: NotRequired[str]  # internal routing — stripped before wire
 
 
 # FIX E1: OAuthFlows and SecurityScheme are now fully typed TypedDicts
 # (were previously `Any`, removing all type safety from auth config).
 
+
 class OAuthFlows(TypedDict, total=False):
-    implicit: dict[str, Any]          # {authorizationUrl, scopes}
-    password: dict[str, Any]          # {tokenUrl, scopes}
-    clientCredentials: dict[str, Any] # {tokenUrl, scopes}
-    authorizationCode: dict[str, Any] # {authorizationUrl, tokenUrl, scopes}
+    implicit: dict[str, Any]  # {authorizationUrl, scopes}
+    password: dict[str, Any]  # {tokenUrl, scopes}
+    clientCredentials: dict[str, Any]  # {tokenUrl, scopes}
+    authorizationCode: dict[str, Any]  # {authorizationUrl, tokenUrl, scopes}
 
 
 class SecurityScheme(TypedDict):
@@ -207,10 +209,9 @@ class JSONRPCErrorResponse(TypedDict):
 # ── Module-level TypeAdapters ──────────────────────────────────────────────────
 # Built once at import time. Never call TypeAdapter(...) inside a request handler.
 
-task_adapter          = TypeAdapter(Task)
-task_list_adapter     = TypeAdapter(TaskListResult)
-message_adapter       = TypeAdapter(Message)
-part_adapter          = TypeAdapter(Part)
-agent_card_adapter    = TypeAdapter(AgentCard)
-rpc_request_adapter   = TypeAdapter(JSONRPCRequest)
-
+task_adapter = TypeAdapter(Task)
+task_list_adapter = TypeAdapter(TaskListResult)
+message_adapter = TypeAdapter(Message)
+part_adapter = TypeAdapter(Part)
+agent_card_adapter = TypeAdapter(AgentCard)
+rpc_request_adapter = TypeAdapter(JSONRPCRequest)

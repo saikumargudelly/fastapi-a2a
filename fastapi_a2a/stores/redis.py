@@ -27,8 +27,7 @@ try:
     import redis.asyncio as _aioredis
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "RedisTaskStore requires the [redis] extra. "
-        "Install with: pip install 'fastapi-a2a[redis]'"
+        "RedisTaskStore requires the [redis] extra. Install with: pip install 'fastapi-a2a[redis]'"
     ) from exc
 
 

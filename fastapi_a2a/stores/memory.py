@@ -7,6 +7,7 @@ Not suitable for: multiple processes or instances sharing state.
 Thread-safety: asyncio.Lock per task_id.
 Eviction: TTL-based background loop (default 1 hour).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +29,6 @@ log = logging.getLogger(__name__)
 
 
 class InMemoryTaskStore(TaskStore):
-
     def __init__(self, ttl_seconds: int = 3600) -> None:
         self._tasks: dict[str, Task] = {}
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -141,7 +141,7 @@ class InMemoryTaskStore(TaskStore):
         tasks.sort(key=lambda t: t["createdAt"])
         if cursor and cursor in [t["id"] for t in tasks]:
             idx = next(i for i, t in enumerate(tasks) if t["id"] == cursor)
-            tasks = tasks[idx + 1:]
+            tasks = tasks[idx + 1 :]
         page = tasks[:limit]
         next_cur = page[-1]["id"] if len(tasks) > limit else None
         return page, next_cur

@@ -11,6 +11,7 @@ function object with a `_a2a_skill` dictionary containing the metadata.
 Later, when `a2a.mount()` is called, our internal scanner hunts down these tags
 and wires them up without disturbing your original routes.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -6,6 +6,7 @@ Knows about: TaskStore, BaseAdapter, RequestContext.
 Does NOT know about: FastAPI, HTTP, JSON-RPC parsing.
 Those concerns stop at the plugin's RPC handler.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -74,7 +75,6 @@ class RequestContext:
 
 
 class TaskManager:
-
     def __init__(
         self,
         app: Any,
@@ -190,8 +190,7 @@ class TaskManager:
         skill = self._skill_map.get(ctx.skill_id or "")
         if skill is None:
             raise UnsupportedOperationError(
-                f"Unknown skill: {ctx.skill_id!r}. "
-                f"Available: {list(self._skill_map)}"
+                f"Unknown skill: {ctx.skill_id!r}. Available: {list(self._skill_map)}"
             )
         payload = ctx.extract_payload()
         response = await self._adapter.call(

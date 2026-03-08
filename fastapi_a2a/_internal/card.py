@@ -8,6 +8,7 @@ Strips endpoint from skills before serialisation — that is internal only.
 FIX A6: removed dead import of TaskStore (was "only for type check" but
 never actually referenced anywhere in this file).
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,7 +26,6 @@ log = logging.getLogger(__name__)
 
 
 class AgentCardBuilder:
-
     def __init__(
         self,
         name: str,
@@ -36,8 +36,7 @@ class AgentCardBuilder:
         skills: list[AgentSkill],
         provider: AgentProvider | None,
     ) -> None:
-        self._card = self._build(name, url, version, description,
-                                 capabilities, skills, provider)
+        self._card = self._build(name, url, version, description, capabilities, skills, provider)
         self._bytes: bytes | None = None
 
     def _build(
@@ -82,9 +81,7 @@ class AgentCardBuilder:
     def build_bytes(self) -> bytes:
         """Serialised JSON bytes. Built once, cached forever."""
         if self._bytes is None:
-            self._bytes = agent_card_adapter.dump_json(
-                self._card, by_alias=True, exclude_none=True
-            )
+            self._bytes = agent_card_adapter.dump_json(self._card, by_alias=True, exclude_none=True)
         return self._bytes
 
     def invalidate_cache(self) -> None:

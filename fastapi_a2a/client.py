@@ -12,6 +12,7 @@ protocol.
 Usage is heavily optimised for standard async/await patterns, so delegating a
 task to an external AI agent feels just like calling a local async function.
 """
+
 from __future__ import annotations
 
 import asyncio  # FIX A3: top-level import, not __import__() inside a hot loop
@@ -34,7 +35,6 @@ from fastapi_a2a._internal.schema import (
 
 
 class A2AClient:
-
     def __init__(
         self,
         base_url: str,
@@ -152,9 +152,7 @@ class A2AClient:
             "id": str(uuid.uuid4()),
             "method": "message/send",
             "params": {
-                "message": message_adapter.dump_python(
-                    message, by_alias=True, exclude_none=True
-                )
+                "message": message_adapter.dump_python(message, by_alias=True, exclude_none=True)
             },
         }
         return await self._rpc(payload)
@@ -184,8 +182,7 @@ class A2AClient:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError(
-                    f"Task {task_id!r} did not complete within "
-                    f"{self._poll_timeout:.0f}s"
+                    f"Task {task_id!r} did not complete within {self._poll_timeout:.0f}s"
                 )
             # FIX A3: asyncio imported at top — not inside loop
             await asyncio.sleep(min(interval_seconds, remaining))

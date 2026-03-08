@@ -10,6 +10,7 @@ mount() — attach A2A endpoints onto the existing app
 One file per framework. Each file is ~100 lines.
 Protocol logic never lives here.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -19,7 +20,6 @@ from fastapi_a2a._internal.schema import AgentSkill
 
 
 class BaseAdapter(ABC):
-
     @abstractmethod
     def scan(self, app: Any) -> list[AgentSkill]:
         """

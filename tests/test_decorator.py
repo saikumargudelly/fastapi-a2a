@@ -1,4 +1,5 @@
 """Tests for the @a2a_skill decorator."""
+
 from __future__ import annotations
 
 import asyncio
@@ -40,6 +41,7 @@ def test_a2a_skill_explicit_id_and_name() -> None:
 
 def test_a2a_skill_mutable_defaults_are_independent() -> None:
     """FIX A1: ensure separate calls don't share the same list objects."""
+
     @a2a_skill(description="x")
     async def func_a() -> None: ...
 

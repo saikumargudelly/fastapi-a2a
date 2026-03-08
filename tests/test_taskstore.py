@@ -1,4 +1,5 @@
 """Tests for InMemoryTaskStore — all B5/B6/F1 fixes verified."""
+
 from __future__ import annotations
 
 import asyncio
@@ -182,9 +183,7 @@ async def test_concurrent_updates_safety() -> None:
     """Concurrent updates to different tasks must not interfere."""
     store = InMemoryTaskStore()
     tasks = [await store.create("ctx", _make_message()) for _ in range(10)]
-    await asyncio.gather(*[
-        store.update_status(t["id"], "working") for t in tasks
-    ])
+    await asyncio.gather(*[store.update_status(t["id"], "working") for t in tasks])
     for t in tasks:
         fetched = await store.get(t["id"])
         assert fetched["status"]["state"] == "working"

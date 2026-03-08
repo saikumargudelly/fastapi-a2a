@@ -4,6 +4,7 @@ Each maps to a JSON-RPC error code. No bare Exception is ever raised.
 
 COMPLETE hierarchy — every protocol error code has a corresponding class.
 """
+
 from __future__ import annotations
 
 from fastapi_a2a._internal import constants as c
@@ -60,6 +61,7 @@ class AuthRequiredError(A2AError):
     Raised when authentication is required but not provided or invalid.
     FIX C1: was missing entirely. AUTH_REQUIRED (-32003) had no exception class.
     """
+
     code = c.AUTH_REQUIRED
 
 
@@ -69,11 +71,13 @@ class PushNotSupportedError(A2AError):
     does not support it.
     FIX C2: was missing entirely. PUSH_NOT_SUPPORTED (-32006) had no exception class.
     """
+
     code = c.PUSH_NOT_SUPPORTED
 
 
 class VersionNotSupportedError(A2AError):
     """FIX C3: was missing from public exports."""
+
     code = c.VERSION_NOT_SUPPORTED
 
     def __init__(self, version: str = "") -> None:
@@ -83,14 +87,20 @@ class VersionNotSupportedError(A2AError):
 
 class A2AInternalError(A2AError):
     """Raised when an underlying endpoint returns an unexpected status."""
+
     code = c.INTERNAL_ERROR
 
 
 class A2ARemoteError(A2AError):
     """Raised by A2AClient when the remote agent returns a JSON-RPC error."""
 
-    def __init__(self, error_dict: dict | None = None, code: int = c.INTERNAL_ERROR,
-                 message: str = "", data: object = None) -> None:
+    def __init__(
+        self,
+        error_dict: dict | None = None,
+        code: int = c.INTERNAL_ERROR,
+        message: str = "",
+        data: object = None,
+    ) -> None:
         if error_dict is not None:
             code = error_dict.get("code", c.INTERNAL_ERROR)
             message = error_dict.get("message", "Remote error")

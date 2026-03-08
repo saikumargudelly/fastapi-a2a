@@ -4,6 +4,7 @@ FastApiAdapter.
 Implements BaseAdapter for FastAPI applications.
 The only file in this package that imports from fastapi directly.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,7 +20,6 @@ from fastapi_a2a.adapters.base import BaseAdapter
 
 
 class FastApiAdapter(BaseAdapter):
-
     def scan(self, app: FastAPI) -> list[AgentSkill]:  # type: ignore[override]
         """
         Walk the FastAPI route tree.
@@ -34,14 +34,14 @@ class FastApiAdapter(BaseAdapter):
             if meta is None:
                 continue
             skill: AgentSkill = {
-                "id":          meta.get("id") or _slugify(route.name),
-                "name":        meta.get("name") or route.name,
+                "id": meta.get("id") or _slugify(route.name),
+                "name": meta.get("name") or route.name,
                 "description": meta.get("description") or "",
-                "tags":        list(meta.get("tags") or []),
-                "examples":    list(meta.get("examples") or []),
-                "inputModes":  ["application/json"],
+                "tags": list(meta.get("tags") or []),
+                "examples": list(meta.get("examples") or []),
+                "inputModes": ["application/json"],
                 "outputModes": ["application/json"],
-                "endpoint":    route.path,   # internal — stripped before wire
+                "endpoint": route.path,  # internal — stripped before wire
             }
             skills.append(skill)
         return skills

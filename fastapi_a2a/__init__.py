@@ -6,6 +6,7 @@ Import only from here. Never from fastapi_a2a._internal.*
 Everything below is stable public surface. All other sub-modules are
 implementation details that may change in any release.
 """
+
 from fastapi_a2a._internal.constants import (
     PROTOCOL_VERSION,
     TERMINAL_STATES,

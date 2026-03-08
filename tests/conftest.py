@@ -7,6 +7,7 @@ Architecture note:
 - client:   ASGI test client (httpx + ASGITransport)
 - All fixtures use module-level models so FastAPI resolves them as JSON body.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,6 +21,7 @@ from fastapi_a2a import FastApiA2A, a2a_skill
 # ── Module-level request models ───────────────────────────────────────────────
 # Must be at module level so FastAPI sees them as JSON body parameters.
 
+
 class EchoRequest(BaseModel):
     text: str
 
@@ -30,6 +32,7 @@ class AddRequest(BaseModel):
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def base_app() -> FastAPI:
@@ -66,9 +69,7 @@ def a2a_app(base_app: FastAPI) -> FastAPI:
 @pytest_asyncio.fixture()
 async def client(a2a_app: FastAPI) -> AsyncClient:
     """Async HTTP test client against a2a_app."""
-    async with AsyncClient(
-        transport=ASGITransport(app=a2a_app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=a2a_app), base_url="http://test") as c:
         yield c
 
 
