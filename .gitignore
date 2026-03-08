@@ -1,16 +1,79 @@
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.pyo
-.env
-*.egg-info/
+*.pyd
+
+# ── Build & packaging ─────────────────────────────────────────────────────────
 dist/
 build/
-.venv/
-env/
-venv/
-.DS_Store
-fastapi-a2a-erd*
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+wheels/
+*.whl
 
-# Editor / IDE
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# ── Testing & coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# ── Type checkers ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.pyright/
+pyrightconfig.json.local
+
+# ── Linters / formatters ──────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── IDE / editor ──────────────────────────────────────────────────────────────
 .vscode/
-.pyre_configuration
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ── Linux / Windows ───────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+
+# ── uv / pip lock ─────────────────────────────────────────────────────────────
+# uv.lock is checked in intentionally — remove if you prefer to not pin.
+# pip.lock  ← not generated; uncomment if you switch tools.
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Docs build ────────────────────────────────────────────────────────────────
+docs/_build/
+site/
+
+# ── Design / scratch files (never commit) ────────────────────────────────────
+# Stray ERD drafts, temporary notes, files with special chars in their names
+*.md'
+"fastapi-a2a-erd-final*"
+tests_critical/

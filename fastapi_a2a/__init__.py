@@ -1,65 +1,109 @@
 """
-fastapi-a2a: Expose FastAPI applications as A2A Protocol agents.
+fastapi_a2a — public API.
 
-Zero boilerplate. Auto-discovers routes, derives typed skill schemas,
-registers with a discovery registry, and provides production-grade security.
+Import only from here. Never from fastapi_a2a._internal.*
+
+Everything below is stable public surface. All other sub-modules are
+implementation details that may change in any release.
 """
-from fastapi_a2a.bridge.config import FastApiA2AConfig, RegistryConfig
-from fastapi_a2a.bridge.main import FastApiA2A
-from fastapi_a2a.database import Base, get_db
-from fastapi_a2a.domains.core_a2a.schemas import (
-    AgentCapabilities,
-    AgentCard,
-    AgentSkill,
-    SkillSchema,
-)
-from fastapi_a2a.exceptions import (
-    A2AError,
-    A2AHTTPError,
-    AccessDeniedError,
-    CardNotFoundError,
-    CardSignatureInvalidError,
-    ConsentExpiredError,
-    ConsentMissingError,
-    DatabaseUnavailableError,
-    SkillCircuitOpenError,
-    SkillNotFoundError,
-    SkillTimeoutError,
-    TaskNotFoundError,
-)
-from fastapi_a2a.logging import get_logger
-from fastapi_a2a.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
+from fastapi_a2a.plugin import FastApiA2A
+from fastapi_a2a.client import A2AClient
+from fastapi_a2a.decorators import a2a_skill
 
-__version__ = "0.6.0"
+from fastapi_a2a.stores.base import TaskStore
+from fastapi_a2a.stores.memory import InMemoryTaskStore
+
+from fastapi_a2a.adapters.base import BaseAdapter
+from fastapi_a2a.adapters.fastapi import FastApiAdapter
+
+from fastapi_a2a._internal.schema import (
+    AgentCard,
+    AgentCapabilities,
+    AgentProvider,
+    AgentSkill,
+    OAuthFlows,
+    SecurityScheme,
+    Task,
+    TaskStatus,
+    TaskListResult,
+    Message,
+    Part,
+    TextPart,
+    FilePart,
+    DataPart,
+    FileWithBytes,
+    FileWithUri,
+    Artifact,
+)
+from fastapi_a2a._internal.constants import (
+    TaskState,
+    TERMINAL_STATES,
+    VALID_TRANSITIONS,
+    PROTOCOL_VERSION,
+)
+from fastapi_a2a._internal.exceptions import (
+    A2AError,
+    A2AInternalError,
+    A2ARemoteError,
+    AuthRequiredError,          # FIX C1: was missing
+    InvalidStateTransitionError,
+    PushNotSupportedError,      # FIX C2: was missing
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+    VersionNotSupportedError,   # FIX C3: was missing from exports
+)
+# RequestContext — useful for type hints in route handlers
+from fastapi_a2a._internal.task_manager import RequestContext
+
+__version__ = "0.1.0"
+
 __all__ = [
-    # Core
+    # ── Entry points ──────────────────────────────────────────────────────────
     "FastApiA2A",
-    "RegistryConfig",
-    "FastApiA2AConfig",
-    # Schemas
+    "A2AClient",
+    "a2a_skill",
+    # ── Stores ────────────────────────────────────────────────────────────────
+    "TaskStore",
+    "InMemoryTaskStore",
+    # ── Adapters ──────────────────────────────────────────────────────────────
+    "BaseAdapter",
+    "FastApiAdapter",
+    # ── Schema ────────────────────────────────────────────────────────────────
     "AgentCard",
-    "AgentSkill",
     "AgentCapabilities",
-    "SkillSchema",
-    # Database
-    "Base",
-    "get_db",
-    # Exceptions
+    "AgentProvider",
+    "AgentSkill",
+    "OAuthFlows",
+    "SecurityScheme",
+    "Task",
+    "TaskStatus",
+    "TaskState",
+    "TaskListResult",
+    "Message",
+    "Part",
+    "TextPart",
+    "FilePart",
+    "DataPart",
+    "FileWithBytes",
+    "FileWithUri",
+    "Artifact",
+    # ── Constants ─────────────────────────────────────────────────────────────
+    "TERMINAL_STATES",
+    "VALID_TRANSITIONS",
+    "PROTOCOL_VERSION",
+    # ── Exceptions ────────────────────────────────────────────────────────────
     "A2AError",
-    "A2AHTTPError",
-    "CardNotFoundError",
-    "CardSignatureInvalidError",
-    "ConsentMissingError",
-    "ConsentExpiredError",
-    "AccessDeniedError",
-    "SkillCircuitOpenError",
-    "SkillNotFoundError",
-    "SkillTimeoutError",
+    "A2AInternalError",
+    "A2ARemoteError",
+    "AuthRequiredError",
+    "InvalidStateTransitionError",
+    "PushNotSupportedError",
+    "TaskNotCancelableError",
     "TaskNotFoundError",
-    "DatabaseUnavailableError",
-    # Middleware
-    "SecurityHeadersMiddleware",
-    "RequestIdMiddleware",
-    # Logging
-    "get_logger",
+    "UnsupportedOperationError",
+    "VersionNotSupportedError",
+    # ── Utilities ─────────────────────────────────────────────────────────────
+    "RequestContext",
+    "__version__",
 ]

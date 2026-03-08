@@ -1,315 +1,109 @@
 # fastapi-a2a
 
-**fastapi-a2a** turns any existing FastAPI application into a fully compliant [A2A Protocol](https://google.github.io/A2A) agent — no boilerplate, no rewrites. Drop it in, and your app instantly gets an agent card, task management, secure token handling, discovery registration, distributed tracing, and consent enforcement.
+A seamless, zero-friction plugin that transforms any existing FastAPI application into a fully compliant Agent-to-Agent (A2A) node.
 
-> This is a **library**, not an application. It has no `main.py`, no server runner, and no bundled migrations. You integrate it into your existing FastAPI app and own those choices.
+Instead of writing custom bridging code or setting up new infrastructure to let AI agents talk to each other, `fastapi-a2a` hooks directly into your application's existing routing. It exposes your regular HTTP endpoints as discoverable "skills" and allows your internal systems to natively communicate with external A2A nodes.
 
----
+[![PyPI](https://img.shields.io/pypi/v/fastapi-a2a)](#)
+[![Python](https://img.shields.io/pypi/pyversions/fastapi-a2a)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## What problem does it solve?
+## Why use this?
 
-The Agent-to-Agent (A2A) Protocol is Google's open standard for agents communicating with each other. Implementing it from scratch means wiring up agent card endpoints, task state machines, JWT security, registry heartbeats, rate limiting, consent enforcement, and more — easily weeks of work.
+When you're building systems that involve multiple AI agents, you eventually run into a communication problem. How does Agent A (say, an NLP classifier) ask Agent B (a database RAG system) for context? 
 
-**fastapi-a2a** does all of that for you as a reusable library. You keep writing FastAPI routes the way you always have; the library introspects them and exposes a compliant A2A interface automatically.
+The A2A protocol solves this by standardising discovery, capability negotiation, and task execution. This library implements that standard natively for FastAPI. It lets you do two things:
 
----
+1. **Become an A2A Agent**: By adding a single decorator to your existing FastAPI routes, they are automatically published to an `/.well-known/agent.json` card. Other agents on the network can discover your application and invoke those routes via a standard JSON-RPC interface.
+2. **Consume other Agents**: You can use the built-in `A2AClient` within your existing route handlers to pause your local execution, delegate a sub-task to a remote agent, wait for its completion, and resume seamlessly.
 
-## Quick Start
+It requires zero changes to your actual business logic. Your existing frontend clients and webhooks will continue hitting the standard REST endpoints exactly as they did before.
+
+## Installation
+
+You can install the core library via pip. It depends strictly on `fastapi`, `pydantic`, and `httpx`.
 
 ```bash
 pip install fastapi-a2a
 ```
 
-```python
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi_a2a import FastApiA2A, SecurityHeadersMiddleware, RequestIdMiddleware
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await a2a.startup()
-    yield
-    await a2a.shutdown()
-
-app = FastAPI(title="My Agent", lifespan=lifespan)
-app.add_middleware(SecurityHeadersMiddleware)   # OWASP security headers
-app.add_middleware(RequestIdMiddleware)         # X-Request-ID tracing
-
-a2a = FastApiA2A(
-    app,
-    name="My Agent",
-    description="What this agent does",
-    url="https://my-agent.example.com",
-    version="1.0.0",
-    database_url="postgresql+asyncpg://user:pass@host/mydb",
-)
-# Agent card is now live at /.well-known/agent.json
-```
-
-The library manages all SQLAlchemy ORM models internally. All 71 tables are available via the shared `Base` metadata — plug them into your existing Alembic migrations or call `Base.metadata.create_all()` in development.
-
----
-
-## Public API
-
-Everything importable from the top-level `fastapi_a2a` package:
-
-```python
-# Core bridge
-from fastapi_a2a import FastApiA2A, FastApiA2AConfig, RegistryConfig
-
-# A2A schemas (Pydantic models)
-from fastapi_a2a import AgentCard, AgentSkill, AgentCapabilities, SkillSchema
-
-# Database — SQLAlchemy Base + FastAPI Depends() factory
-from fastapi_a2a import Base, get_db
-
-# Exceptions — typed A2A error hierarchy
-from fastapi_a2a import (
-    A2AError,                    # base class
-    A2AHTTPError,                # base HTTP error (has .status_code, .error_code)
-    CardNotFoundError,           # 404 / 4000
-    CardSignatureInvalidError,   # 401 / 4010
-    ConsentMissingError,         # 403 / 4020
-    ConsentExpiredError,         # 403 / 4021
-    AccessDeniedError,           # 403 / 4040
-    SkillCircuitOpenError,       # 503 / 4032
-    SkillNotFoundError,          # 404 / 4033
-    SkillTimeoutError,           # 504 / 4030
-    TaskNotFoundError,           # 404 / 4070
-    DatabaseUnavailableError,    # 503 / 5001
-)
-
-# Middleware
-from fastapi_a2a import SecurityHeadersMiddleware, RequestIdMiddleware
-
-# Logging
-from fastapi_a2a import get_logger
-logger = get_logger(__name__)
-```
-
-**Using `get_db` in your own routes:**
-```python
-from fastapi import Depends
-from fastapi_a2a import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
-
-@router.get("/my-endpoint")
-async def my_route(db: AsyncSession = Depends(get_db(app.state.session_factory))):
-    ...
-```
-
-## Configuration
-
-Pass settings as constructor parameters or via `A2A_`-prefixed environment variables:
-
-```python
-a2a = FastApiA2A(
-    app,
-    name="My Agent",
-    description="...",
-    url="https://my-agent.example.com",
-    version="1.0.0",                           # SemVer enforced at DB level
-    database_url="postgresql+asyncpg://...",    # or A2A_DATABASE_URL env var
-    icon_url="https://example.com/icon.png",    # optional
-    min_sdk_version="1.0.0",                    # optional
-    input_modes=["text/plain"],                 # optional
-    output_modes=["text/plain"],                # optional
-    supports_auth_schemes=["bearer"],           # optional
-)
-```
+If you plan to run multiple uvicorn workers and need tasks to persist across process boundaries, we include an optional Redis-backed store:
 
 ```bash
-A2A_DATABASE_URL=postgresql+asyncpg://user:pass@host/mydb
-A2A_REQUIRE_SIGNED_CARDS=true
-A2A_DISCOVERY_MODE=auto    # auto | explicit | disabled
+pip install "fastapi-a2a[redis]"
 ```
 
----
+## Quick Start
 
-## Auto-mounted Endpoints
+### 1. Expose your application
 
-| Endpoint | Description |
-|---|---|
-| `GET /.well-known/agent.json` | A2A agent card (public skills only) |
-| `GET /.well-known/agent-extended.json` | Extended card with quarantine/approval status |
-| `POST /rpc` | JSON-RPC: `tasks/send`, `tasks/get`, `tasks/cancel`, `tasks/sendSubscribe` |
-| `GET /tasks` | List all tasks |
-| `GET /tasks/{id}` | Task detail — messages, artifacts, push config |
-| `POST /tasks/{id}/cancel` | Cancel a running task |
-| `GET /registry/agents` | Discover nearby A2A-compatible agents |
-| `POST /registry/agents` | Self-register in the discovery index |
-| `GET /admin/keys` | JWKS public key endpoint |
-| `POST /admin/keys/rotate` | Rotate card signing key (KMS-backed) |
-| `GET /consent/policies` | View data-use consent records |
-| `GET /rpc/health` | Liveness probe → `{"status":"ok","protocol":"A2A/1.0"}` |
+Imagine you have a straightforward summarisation endpoint. To make it discoverable on the A2A network, just add the `@a2a_skill` decorator and mount the plugin at the bottom of your file.
 
-### Background Services
+```python
+from fastapi import FastAPI
+from fastapi_a2a import FastApiA2A, a2a_skill
 
-Started automatically on `startup()` — no extra config needed:
+app = FastAPI()
 
-| Service | What it does |
-|---|---|
-| **Heartbeat scheduler** | Pings registry on interval; reports active `region` for multi-region failover |
-| **Embedding pipeline** | Async job queue with `SELECT … FOR UPDATE SKIP LOCKED`; pluggable vector DB |
-| **Consent cache GC** | Expires stale `consent_cache` entries; 300 s (allow/warn) / 60 s (deny) TTL |
-| **Token TTL enforcer** | Cancels tasks whose `ttl_seconds` has elapsed |
-| **SLA monitor** | Auto-escalates breached `approval_workflow` steps |
-| **Reputation engine** | Scores agent safety from card scan history |
-| **Dual-write worker** | Fans `token_audit_log` writes to remote regions for compliance |
+# Your existing, unchanged business logic
+@app.post("/summarise")
+@a2a_skill(description="Summarises long-form text into key bullet points.", tags=["nlp"])
+async def summarise(req: dict) -> dict:
+    return {"summary": "This is a summary of the text..."}
 
----
-
-## Domain Model
-
-**71 ORM-mapped entities across 15 domains** — each unique, zero duplicates, all enforced with DB-level constraints:
-
-| Domain | Tables |
-|---|---|
-| **Core A2A** | `agent_card`, `agent_capabilities`, `agent_skill`, `skill_schema`, `card_history` |
-| **Task Lifecycle** | `task`, `session`, `message`, `message_part`, `artifact` |
-| **Security** | `security_scheme`, `agent_token`, `push_notification_config`, `card_key_revocation_log`, `consent_proof_token` |
-| **Registry & Discovery** | `registry_entry`, `heartbeat`, `agent_dependency` |
-| **Access Control** | `access_policy`, `role_assignment`, `acl_entry`, `policy_cache`, `policy_cache_invalidation_event`, `policy_evaluation_log` |
-| **Tracing** | `trace_span`, `trace_context` |
-| **Token Hardening** | `token_family`, `token_audit_log`, `token_rate_limit`, `token_rate_limit_shard` |
-| **Embedding** | `embedding_config`, `embedding_job`, `embedding_version`, `embedding_migration_plan` |
-| **Consent & Governance** | `consent_record`, `governance_policy`, `approval_workflow`, `workflow_step`, `workflow_assignment`, `approver_delegation` |
-| **Key Management** | `card_signing_key`, `card_signing_event` |
-| **Execution Policy** | `executor_policy`, `trace_policy`, `consent_cache`, `trace_compliance_job`, `slo_definition`, `alert_rule`, `oncall_playbook`, `job_lease` |
-| **FastAPI Bridge** | `route_mapping`, `fastapi_a2a_config_row`, `startup_audit_log`, `sdk_compatibility_matrix` |
-| **Dynamic Capability** | `skill_query_log`, `nlp_analyzer_config` |
-| **Federation & Crawler** | `federation_peer`, `crawler_source`, `crawler_job`, `crawler_import_permission`, `crawler_ownership_proof`, `crawler_takedown_request` |
-| **Safety & Reputation** | `card_scan_result`, `sanitization_report`, `agent_reputation`, `synthetic_check`, `synthetic_check_result`, `schema_version`, `takedown_request`, `dual_write_queue` |
-
----
-
-## Security
-
-All constraints are enforced at the **PostgreSQL level** — bypassing application code is not possible:
-
-| Constraint | What it enforces |
-|---|---|
-| `ck_agent_token_hash_format` | `token_hash ~ '^[a-f0-9]{64}$'` — SHA-256 hex only; plaintext never stored |
-| `ck_agent_token_expiry` | `expires_at IS NULL OR expires_at > issued_at` |
-| `ck_push_notification_webhook_https` | `webhook_url LIKE 'https://%'` — HTTP webhooks rejected at DB level |
-| `ck_agent_card_semver` | `version ~ '^[0-9]+\.[0-9]+\.[0-9]+$'` — malformed versions rejected |
-| `uq_security_scheme_card_name` | `UNIQUE(agent_card_id, scheme_name)` — duplicate schemes blocked |
-| `ck_consent_cache_result` | `result IN ('allow','warn','deny')` — no arbitrary values |
-| `ck_consent_cache_ttl` | `expires_at > checked_at` — negative TTL impossible |
-| `ck_trace_policy_sample_rate` | `trace_sample_rate BETWEEN 0.0 AND 1.0` |
-| `ck_trace_policy_export_size` | `max_export_size_bytes BETWEEN 1024 AND 104857600` |
-| `ck_token_rate_limit_positive` | `window_seconds > 0 AND max_requests > 0 AND max_burst > 0` |
-| `ck_job_lease_ttl` | `lease_ttl_seconds BETWEEN 30 AND 86400` |
-| `ck_approval_workflow_step_non_negative` | `current_step >= 0` |
-
-**Additional security features:**
-- **Token family revocation** — reuse attack detected → entire family revoked instantly
-- **Signed agent cards** — JWS/JWKS with KMS key refs; fails with error `4010`
-- **Execution isolation** — `executor_policy` circuit breaker with CPU/memory/timeout limits
-- **Append-only audit logs** — `token_audit_log`, `startup_audit_log`, `card_signing_event`
-- **Multi-region dual-write** — `data_region` column + worker for KMS-encrypted remote archiving
-- **PII-safe tracing** — `trace_policy` redaction rules (JSONB regex), `attribute_allowlist`/`attribute_blocklist`, optional HMAC key hashing
-
-### A2A Error Code Namespace
-
-| Code | Meaning |
-|---|---|
-| `4010` | `card.signature_invalid` |
-| `4020` | `consent.missing` |
-| `4021` | `consent.expired` |
-| `4022` | `consent.region_violation` |
-| `4030` | `skill.timeout` |
-| `4031` | `skill.memory_exceeded` |
-| `4032` | `skill.circuit_open` |
-| `4033` | `skill.not_found` |
-| `4040` | `access.denied` |
-| `4050` | `rate.window_exceeded` |
-| `4051` | `rate.burst_exceeded` |
-| `4060` | `governance.data_residency_violation` |
-| `5001` | `platform.db_unavailable` |
-
----
-
-## Project Structure
-
-```
-fastapi_a2a/
-├── bridge/               # FastApiA2A class, config, route inspector, SDK compat
-├── database.py           # Async engine + session factory (URL supplied by consumer)
-└── domains/
-    ├── core_a2a/         # AgentCard, AgentSkill, SkillSchema, JSON-RPC handler
-    ├── task_lifecycle/   # Task, Session, Message, MessagePart, Artifact + REST API
-    ├── security/         # SecurityScheme, AgentToken, PushNotificationConfig
-    ├── registry/         # RegistryEntry, Heartbeat, AgentDependency
-    ├── access_control/   # AccessPolicy, RoleAssignment, AclEntry, PolicyCache
-    ├── tracing/          # TraceSpan, TraceContext (OTel-compatible)
-    ├── token_hardening/  # TokenFamily, TokenAuditLog, RateLimit (dual-write)
-    ├── embedding/        # EmbeddingConfig, EmbeddingJob, EmbeddingVersion
-    ├── consent/          # ConsentRecord, GovernancePolicy, ApprovalWorkflow
-    ├── key_management/   # CardSigningKey, CardSigningEvent (KMS-backed)
-    ├── execution_policy/ # ExecutorPolicy, TracePolicy, ConsentCache, SLOs, Alerts
-    ├── federation/       # FederationPeer, CrawlerJob, CrawlerImportPermission
-    ├── dynamic_capability/ # SkillQueryLog, NlpAnalyzerConfig
-    └── safety/           # CardScanResult, SanitizationReport, AgentReputation
+# The integration
+a2a = FastApiA2A(app, name="My NLP Tools", url="https://nlp.example.com")
+a2a.mount()
 ```
 
----
+By calling `a2a.mount()`, the library automatically inspects your app, finds the decorated route, generates the standardised `AgentCard`, and opens up a `/a2a/rpc` endpoint to handle incoming agent requests.
 
-## Requirements
+### 2. Communicate with other agents
 
-- Python ≥ 3.11
-- PostgreSQL with the `asyncpg` driver (`postgresql+asyncpg://...`)
-- Redis *(optional — rate limiter falls back to in-memory if unreachable)*
+If your application needs to delegate work to an external system, you don't need to manually poll HTTP endpoints. The `A2AClient` handles the lifecycle for you.
 
----
+```python
+from fastapi_a2a import A2AClient
+
+@app.post("/pipeline")
+async def translation_pipeline(req: dict) -> dict:
+    # 1. Do some local processing first
+    local_summary = await do_local_work(req["document"])
+
+    # 2. Delegate the translation step to an external specialised agent
+    async with A2AClient("https://translation-agent.example.com") as client:
+        # This will block securely until the remote agent finishes the task
+        task = await client.send_task(
+            text=local_summary,
+            skill_id="translate",
+            data={"target_lang": "es"}
+        )
+        
+        # Extract the final output from the remote agent's artifacts
+        translation = task["artifacts"][0]["parts"][0]["data"]["text"]
+
+    return {"final_translation": translation}
+```
+
+## Architecture
+
+The plugin is designed to be highly modular and defensive:
+
+- **Type Safety**: The entire A2A schema (version 0.3.0) is modelled using strict, zero-overhead `TypedDict` implementations validated by Pydantic's `TypeAdapter`.
+- **Stateless by Default**: Out of the box, it uses an `InMemoryTaskStore` with built-in TTL eviction, making it perfect for single-instance deployments or quick local development.
+- **Pluggable Persistence**: For production workloads, you can easily swap the storage backend by implementing the `TaskStore` abstract base class (e.g., using PostgreSQL or the provided Redis adapter).
+- **In-process Bridging**: When an external agent invokes your skill via the RPC endpoint, the request is bridged to your FastAPI route directly through the ASGI protocol. It does not make a network loopback call.
 
 ## Development
 
-```bash
-git clone https://github.com/your-org/fastapi-a2a
-cd fastapi-a2a
-
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-pytest tests/ -q          # → 66 passed
-ruff check fastapi_a2a/   # → 0 errors
-pyright fastapi_a2a/      # → 0 errors, 0 warnings
-```
-
-### Optional vector DB support
+If you'd like to contribute, we use `uv` for dependency management.
 
 ```bash
-pip install "fastapi-a2a[vector-weaviate]"   # Weaviate
-pip install "fastapi-a2a[vector-pinecone]"   # Pinecone
-pip install "fastapi-a2a[vector-qdrant]"     # Qdrant
+uv sync --group dev
+uv run pytest tests/ -v
+uv run ruff check fastapi_a2a
 ```
-
----
-
-## Database Migrations
-
-This is a **library, not an application** — it exports `Base` metadata but never runs migrations itself.
-
-**Recommended — integrate with your Alembic setup:**
-
-```python
-# alembic/env.py
-from fastapi_a2a.database import Base
-target_metadata = Base.metadata
-```
-
-**Development only — create tables directly:**
-
-```python
-from fastapi_a2a.database import Base, engine
-async with engine.begin() as conn:
-    await conn.run_sync(Base.metadata.create_all)
-```
-
----
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+This project is licensed under the MIT License - see the LICENSE file for details.
