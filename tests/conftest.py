@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
-from fastapi_a2a import FastApiA2A, a2a_skill
+from fastapi_a2a import a2a_skill, setup_fastapi_a2a
 
 # ── Module-level request models ───────────────────────────────────────────────
 # Must be at module level so FastAPI sees them as JSON body parameters.
@@ -55,14 +55,13 @@ def base_app() -> FastAPI:
 @pytest.fixture()
 def a2a_app(base_app: FastAPI) -> FastAPI:
     """base_app with FastApiA2A plugin mounted."""
-    a2a = FastApiA2A(
+    setup_fastapi_a2a(
         base_app,
         name="Test Agent",
         url="https://test.example.com",
         version="1.0.0",
         description="A test agent",
     )
-    a2a.mount()
     return base_app
 
 

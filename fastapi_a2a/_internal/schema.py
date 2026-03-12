@@ -42,6 +42,7 @@ class AgentSkill(TypedDict):
     outputModes: list[str]
     tags: NotRequired[list[str]]
     examples: NotRequired[list[str]]
+    outputSchema: NotRequired[dict[str, Any]]
     endpoint: NotRequired[str]  # internal routing — stripped before wire
 
 

@@ -36,11 +36,20 @@ class FastApiAdapter(BaseAdapter):
             allowed_methods = {"GET", "POST", "PUT", "DELETE", "PATCH"}
             if not route.methods or not any(m in route.methods for m in allowed_methods):
                 raise ValueError(
-                    f"Route {route.path} decorated with @a2a_skill must support GET, POST, PUT, DELETE, or PATCH"
+                    f"Route {route.path} decorated with @a2a_skill must support GET, "
+                    "POST, PUT, DELETE, or PATCH"
                 )
 
             methods = [m for m in route.methods if m in allowed_methods]
             primary_method = methods[0] if methods else "POST"
+
+            out_schema = None
+            if getattr(route, "response_model", None):
+                try:
+                    from pydantic import TypeAdapter
+                    out_schema = TypeAdapter(route.response_model).json_schema()
+                except Exception:
+                    pass
 
             skill: AgentSkill = {
                 "id": meta.get("id") or _slugify(route.name),
@@ -52,6 +61,9 @@ class FastApiAdapter(BaseAdapter):
                 "outputModes": ["application/json"],
                 "endpoint": f"{primary_method} {route.path}",  # internal — stripped before wire
             }
+            if out_schema:
+                skill["outputSchema"] = out_schema
+
             skills.append(skill)
         return skills
 
@@ -134,9 +146,8 @@ class FastApiAdapter(BaseAdapter):
                 f"Endpoint {path!r} returned {response_status}: {b''.join(response_body).decode()}"
             )
         if response_status >= 400:
-            raise A2AInternalError(
-                f"Endpoint {path!r} rejected request ({response_status}): {b''.join(response_body).decode()}"
-            )
+            msg = b"".join(response_body).decode()
+            raise A2AInternalError(f"Endpoint {path!r} rejected request ({response_status}): {msg}")
         return json.loads(b"".join(response_body).decode())
 
     def mount(  # type: ignore[override]

@@ -92,14 +92,14 @@ class A2AClient:
 
         parsed = urlparse(self._base_url)
         # Fast local host mapping override if a custom HTTP transport approach isn't available
-        # Directing the exact base_url to the resolved IP while injecting a Host Header natively patches 90% of requests
+        # Directing exact base_url to resolved IP while injecting Host Header natively patches 90%
         resolved_ip = _secure_resolve(parsed.hostname or "")
         safe_url = self._base_url.replace(parsed.hostname or "", resolved_ip)
 
         self._http = httpx.AsyncClient(
             base_url=safe_url,
             timeout=self._timeout,
-            headers=self._default_headers(),
+            headers=get_default_headers(self._auth_token),
         )
         self._http.headers["Host"] = parsed.hostname or ""
         return self
@@ -146,29 +146,9 @@ class A2AClient:
         metadata: dict | None = None,
     ) -> Task:
         """
-        Send a task and block until terminal state.
-        Raises TimeoutError if poll_timeout_seconds is exceeded.
-        For fire-and-forget, use send_message() instead.
+        Send a task via message/send protocol. Returns immediately with 'submitted' state.
+        Callers must independently poll `poll_task_status(task_id)` to await completion.
         """
-        task = await self.send_message(
-            text=text,
-            skill_id=skill_id,
-            data=data,
-            context_id=context_id,
-            metadata=metadata,
-        )
-        return await self._poll_until_done(task["id"])
-
-    async def send_message(
-        self,
-        text: str,
-        *,
-        skill_id: str | None = None,
-        data: dict | None = None,
-        context_id: str | None = None,
-        metadata: dict | None = None,
-    ) -> Task:
-        """Send task. Return immediately with 'submitted' state."""
         parts = []
         if text:
             parts.append({"kind": "text", "text": text})
@@ -181,8 +161,6 @@ class A2AClient:
             if skill_id:
                 combined_meta["skillId"] = skill_id
 
-        # Pyright strict check ignores this mock message since it's just
-        # for list.append history stubbing
         message: Message = {  # type: ignore[typeddict-item]
             "role": "user",
             "kind": "message",
@@ -190,31 +168,25 @@ class A2AClient:
             "parts": parts,
             **({"metadata": combined_meta} if combined_meta else {}),
         }
-        payload = {
-            "jsonrpc": "2.0",
-            "id": str(uuid.uuid4()),
-            "method": "message/send",
-            "params": {
-                "message": message_adapter.dump_python(message, by_alias=True, exclude_none=True)
-            },
-        }
+        payload = create_rpc_payload(
+            "message/send",
+            {"message": message_adapter.dump_python(message, by_alias=True, exclude_none=True)}
+        )
         return await self._rpc(payload)
 
     async def get_task(self, task_id: str) -> Task:
-        return await self._rpc(self._rpc_payload("tasks/get", {"id": task_id}))
+        return await self._rpc(create_rpc_payload("tasks/get", {"id": task_id}))
 
     async def cancel_task(self, task_id: str) -> Task:
-        return await self._rpc(self._rpc_payload("tasks/cancel", {"id": task_id}))
+        return await self._rpc(create_rpc_payload("tasks/cancel", {"id": task_id}))
 
-    # ── Internal ──────────────────────────────────────────────────────────────
-
-    async def _poll_until_done(
+    async def poll_task_status(
         self,
         task_id: str,
         interval_seconds: float = 0.5,
     ) -> Task:
         """
-        FIX B7: bounded polling.
+        Explicitly poll the tasks/get endpoint until a terminal state is reached.
         Raises TimeoutError after self._poll_timeout seconds.
         """
         deadline = time.monotonic() + self._poll_timeout
@@ -227,7 +199,6 @@ class A2AClient:
                 raise TimeoutError(
                     f"Task {task_id!r} did not complete within {self._poll_timeout:.0f}s"
                 )
-            # FIX A3: asyncio imported at top — not inside loop
             await asyncio.sleep(min(interval_seconds, remaining))
 
     async def _rpc(self, payload: dict) -> Task:
@@ -249,19 +220,43 @@ class A2AClient:
             )
         return task_adapter.validate_python(body["result"])
 
-    def _rpc_payload(self, method: str, params: dict) -> dict:
-        return {
-            "jsonrpc": "2.0",
-            "id": str(uuid.uuid4()),
-            "method": method,
-            "params": params,
-        }
+def create_rpc_payload(method: str, params: dict) -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": str(uuid.uuid4()),
+        "method": method,
+        "params": params,
+    }
 
-    def _default_headers(self) -> dict[str, str]:
-        headers = {
-            "Content-Type": "application/json",
-            "A2A-Version": PROTOCOL_VERSION,
-        }
-        if self._auth_token:
-            headers["Authorization"] = f"Bearer {self._auth_token}"
-        return headers
+def get_default_headers(auth_token: str | None = None) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "A2A-Version": PROTOCOL_VERSION,
+    }
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+    return headers
+
+def create_a2a_client(
+    base_url: str,
+    *,
+    auth_token: str | None = None,
+    timeout_seconds: float = 30.0,
+    card_ttl_seconds: int = 300,
+    poll_timeout_seconds: float = 300.0,
+    allowed_hosts: list[str] | None = None,
+    allow_internal_ips: bool = False,
+) -> A2AClient:
+    """
+    Primary factory for generating an A2A remote client.
+    Handles bounding check dependencies and enforces clean constructor layout.
+    """
+    return A2AClient(
+        base_url=base_url,
+        auth_token=auth_token,
+        timeout_seconds=timeout_seconds,
+        card_ttl_seconds=card_ttl_seconds,
+        poll_timeout_seconds=poll_timeout_seconds,
+        allowed_hosts=allowed_hosts,
+        allow_internal_ips=allow_internal_ips,
+    )

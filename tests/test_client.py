@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
-from fastapi_a2a import A2AClient, FastApiA2A, a2a_skill
+from fastapi_a2a import a2a_skill, create_a2a_client, setup_fastapi_a2a
 
 # ── Module-level model so FastAPI resolves it as JSON body ────────────────────
 
@@ -30,7 +30,7 @@ def echo_agent() -> FastAPI:
     async def echo(req: EchoReq) -> dict:  # type: ignore[return-value]
         return {"text": req.text}
 
-    FastApiA2A(app, name="Echo Agent", url="https://echo.example.com").mount()
+    setup_fastapi_a2a(app, name="Echo Agent", url="https://echo.example.com")
     return app
 
 
@@ -57,7 +57,7 @@ async def test_client_get_card(agent_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_client_raises_without_context_manager() -> None:
     """FIX A2: must raise RuntimeError, not AttributeError from assert."""
-    client = A2AClient("https://x.com")
+    client = create_a2a_client("https://x.com")
     with pytest.raises(RuntimeError, match="context manager"):
         await client.get_card()
 
@@ -65,8 +65,9 @@ async def test_client_raises_without_context_manager() -> None:
 @pytest.mark.asyncio
 async def test_client_default_headers(agent_client: AsyncClient) -> None:
     """FIX A3: asyncio imported at top-level — no dynamic imports in hot paths."""
-    client = A2AClient("https://x.com", auth_token="tok")
-    headers = client._default_headers()
+    client = create_a2a_client("https://x.com", auth_token="tok")
+    from fastapi_a2a.client import get_default_headers
+    headers = get_default_headers(client._auth_token)
     assert headers["A2A-Version"] == "0.3.0"
     assert "Bearer tok" in headers["Authorization"]
 
@@ -167,7 +168,7 @@ async def test_client_poll_timeout_raises() -> None:
     """FIX B7: poll_timeout_seconds 0 should raise TimeoutError immediately."""
     from unittest.mock import AsyncMock, patch
 
-    client = A2AClient("https://x.com", poll_timeout_seconds=0.01)
+    client = create_a2a_client("https://x.com", poll_timeout_seconds=0.01)
     client._http = AsyncMock()
 
     # Mock get_task to always return 'submitted'
@@ -185,4 +186,4 @@ async def test_client_poll_timeout_raises() -> None:
     }
     with patch.object(client, "get_task", AsyncMock(return_value=submitted_task)):
         with pytest.raises(TimeoutError):
-            await client._poll_until_done("t1", interval_seconds=0.001)
+            await client.poll_task_status("t1", interval_seconds=0.001)

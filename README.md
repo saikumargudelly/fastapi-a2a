@@ -41,7 +41,7 @@ Imagine you have a straightforward summarisation endpoint. To make it discoverab
 
 ```python
 from fastapi import FastAPI
-from fastapi_a2a import FastApiA2A, a2a_skill
+from fastapi_a2a import setup_fastapi_a2a, a2a_skill
 
 app = FastAPI()
 
@@ -52,8 +52,7 @@ async def summarise(req: dict) -> dict:
     return {"summary": "This is a summary of the text..."}
 
 # The integration
-a2a = FastApiA2A(app, name="My NLP Tools", url="https://nlp.example.com")
-a2a.mount()
+a2a = setup_fastapi_a2a(app, name="My NLP Tools", url="https://nlp.example.com")
 ```
 
 By calling `a2a.mount()`, the library automatically inspects your app, finds the decorated route, generates the standardised `AgentCard`, and opens up a `/a2a/rpc` endpoint to handle incoming agent requests.
@@ -63,7 +62,7 @@ By calling `a2a.mount()`, the library automatically inspects your app, finds the
 If your application needs to delegate work to an external system, you don't need to manually poll HTTP endpoints. The `A2AClient` handles the lifecycle for you.
 
 ```python
-from fastapi_a2a import A2AClient
+from fastapi_a2a import create_a2a_client
 
 @app.post("/pipeline")
 async def translation_pipeline(req: dict) -> dict:
@@ -71,13 +70,16 @@ async def translation_pipeline(req: dict) -> dict:
     local_summary = await do_local_work(req["document"])
 
     # 2. Delegate the translation step to an external specialised agent
-    async with A2AClient("https://translation-agent.example.com") as client:
-        # This will block securely until the remote agent finishes the task
+    async with create_a2a_client("https://translation-agent.example.com") as client:
+        # This will dispatch the payload and return the Task ID immediately
         task = await client.send_task(
             text=local_summary,
             skill_id="translate",
             data={"target_lang": "es"}
         )
+        
+        # 3. Explicitly poll the remote store until completion
+        task = await client.poll_task_status(task["id"])
         
         # Extract the final output from the remote agent's artifacts
         translation = task["artifacts"][0]["parts"][0]["data"]["text"]
@@ -98,11 +100,12 @@ pip install "fastapi-a2a[redis]"
 ```python
 import redis.asyncio as redis
 from fastapi_a2a.stores.redis import RedisTaskStore
+from fastapi_a2a import setup_fastapi_a2a
 
 redis_client = redis.from_url("redis://localhost:6379")
 store = RedisTaskStore(redis_client)
 
-a2a = FastApiA2A(app, name="Agent", url="...", store=store)
+a2a = setup_fastapi_a2a(app, name="Agent", url="...", store=store)
 ```
 
 ## Architecture

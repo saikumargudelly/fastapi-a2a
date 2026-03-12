@@ -8,7 +8,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from fastapi_a2a import FastApiA2A, a2a_skill
+from fastapi_a2a import a2a_skill
+from fastapi_a2a.plugin import FastApiA2A
 
 
 @pytest.mark.asyncio

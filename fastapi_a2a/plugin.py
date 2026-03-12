@@ -167,7 +167,7 @@ class FastApiA2A:
     async def _handle_rpc(self, request: Request) -> Response:
         version = request.headers.get("A2A-Version", "0.3.0")
         if version not in SUPPORTED_VERSIONS:
-            return self._error_response(
+            return create_error_response(
                 None, INVALID_PARAMS, f"Unsupported A2A-Version: {version!r}"
             )
 
@@ -175,25 +175,25 @@ class FastApiA2A:
         try:
             rpc = rpc_request_adapter.validate_json(body)
         except Exception as exc:
-            return self._error_response(None, PARSE_ERROR, str(exc))
+            return create_error_response(None, PARSE_ERROR, str(exc))
 
         rpc_id = rpc.get("id")
         method = rpc.get("method", "")
         params: dict[str, Any] = rpc.get("params") or {}
-        headers = self._extract_auth(request)
+        headers = extract_auth(request)
 
         try:
             match method:
                 case "message/send":
                     # FIX D2: validate required key before delegation
                     if "message" not in params:
-                        return self._error_response(
+                        return create_error_response(
                             rpc_id,
                             INVALID_PARAMS,
                             "params.message is required for message/send",
                         )
                     task = await self._manager.send_message(params, headers)
-                    return self._ok_response(
+                    return create_ok_response(
                         rpc_id,
                         task_adapter.dump_python(task, by_alias=True, exclude_none=True),
                     )
@@ -201,13 +201,13 @@ class FastApiA2A:
                 case "tasks/get":
                     # FIX D1: validate 'id' — was bare KeyError → INTERNAL_ERROR
                     if "id" not in params or not isinstance(params["id"], str):
-                        return self._error_response(
+                        return create_error_response(
                             rpc_id,
                             INVALID_PARAMS,
                             "params.id (string) is required for tasks/get",
                         )
                     task = await self._manager.get_task(params["id"])
-                    return self._ok_response(
+                    return create_ok_response(
                         rpc_id,
                         task_adapter.dump_python(task, by_alias=True, exclude_none=True),
                     )
@@ -215,13 +215,13 @@ class FastApiA2A:
                 case "tasks/cancel":
                     # FIX D1: same validation as tasks/get
                     if "id" not in params or not isinstance(params["id"], str):
-                        return self._error_response(
+                        return create_error_response(
                             rpc_id,
                             INVALID_PARAMS,
                             "params.id (string) is required for tasks/cancel",
                         )
                     task = await self._manager.cancel_task(params["id"])
-                    return self._ok_response(
+                    return create_ok_response(
                         rpc_id,
                         task_adapter.dump_python(task, by_alias=True, exclude_none=True),
                     )
@@ -244,39 +244,79 @@ class FastApiA2A:
                     }
                     if next_cursor:
                         result["nextCursor"] = next_cursor
-                    return self._ok_response(rpc_id, result)
+                    return create_ok_response(rpc_id, result)
 
                 case _:
-                    return self._error_response(
+                    return create_error_response(
                         rpc_id, METHOD_NOT_FOUND, f"Method not found: {method!r}"
                     )
 
         except A2AError as exc:
-            return self._error_response(rpc_id, exc.code, str(exc))
+            return create_error_response(rpc_id, exc.code, str(exc))
         except Exception as exc:
             log.exception("Unhandled error in RPC handler for method %r", method)
-            return self._error_response(rpc_id, INTERNAL_ERROR, str(exc))
+            return create_error_response(rpc_id, INTERNAL_ERROR, str(exc))
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _extract_auth(self, request: Request) -> dict[str, str]:
-        headers: dict[str, str] = {}
-        auth = request.headers.get("Authorization")
-        if auth:
-            headers["Authorization"] = auth
-        return headers
+def extract_auth(request: Request) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    auth = request.headers.get("Authorization")
+    if auth:
+        headers["Authorization"] = auth
+    return headers
 
-    def _ok_response(self, rpc_id: Any, result: Any) -> Response:
-        body = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result})
-        return Response(content=body, media_type="application/json")
+def create_ok_response(rpc_id: Any, result: Any) -> Response:
+    body = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result})
+    return Response(content=body, media_type="application/json")
 
-    def _error_response(self, rpc_id: Any, code: int, message: str) -> Response:
-        body = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {"code": code, "message": message},
-            }
-        )
-        # JSON-RPC errors are always HTTP 200 — status is in the error body
-        return Response(content=body, media_type="application/json", status_code=200)
+def create_error_response(rpc_id: Any, code: int, message: str) -> Response:
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": code, "message": message},
+        }
+    )
+    # JSON-RPC errors are always HTTP 200 — status is in the error body
+    return Response(content=body, media_type="application/json", status_code=200)
+
+def setup_fastapi_a2a(
+    app: FastAPI,
+    *,
+    name: str,
+    url: str,
+    version: str = "1.0.0",
+    description: str | None = None,
+    provider: AgentProvider | None = None,
+    store: TaskStore | None = None,
+    skills: list[AgentSkill] | None = None,
+    streaming: bool = False,
+    push_notifications: bool = False,
+    state_transition_history: bool = True,
+    timeout_seconds: float = 120.0,
+    max_concurrency: int = 100,
+    prefix: str = "/a2a",
+) -> FastApiA2A:
+    """
+    Primary factory to mount A2A capabilities onto a FastAPI app.
+    Instantiates the internal FastApiA2A service and mounts the routes.
+    """
+    a2a = FastApiA2A(
+        app=app,
+        name=name,
+        url=url,
+        version=version,
+        description=description,
+        provider=provider,
+        store=store,
+        skills=skills,
+        streaming=streaming,
+        push_notifications=push_notifications,
+        state_transition_history=state_transition_history,
+        timeout_seconds=timeout_seconds,
+        max_concurrency=max_concurrency,
+        prefix=prefix,
+    )
+    a2a.mount()
+    return a2a
