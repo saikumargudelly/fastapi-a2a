@@ -30,10 +30,11 @@ class FastApiAdapter(BaseAdapter):
             if not isinstance(route, APIRoute):
                 continue
             meta: dict | None = getattr(route.endpoint, "_a2a_skill", None)
-            
+
             # FastAPI Routers wrap endpoints in Dependants. We must inspect the underlying call.
-            if meta is None and hasattr(route, "dependant") and getattr(route.dependant, "call", None):
-                meta = getattr(route.dependant.call, "_a2a_skill", None)
+            if meta is None and hasattr(route, "dependant"):
+                if getattr(route.dependant, "call", None):
+                    meta = getattr(route.dependant.call, "_a2a_skill", None)
 
             if meta is None:
                 continue
