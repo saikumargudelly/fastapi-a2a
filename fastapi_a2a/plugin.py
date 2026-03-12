@@ -257,7 +257,9 @@ class FastApiA2A:
             log.exception("Unhandled error in RPC handler for method %r", method)
             return create_error_response(rpc_id, INTERNAL_ERROR, str(exc))
 
+
 # ── Helpers ───────────────────────────────────────────────────────────────
+
 
 def extract_auth(request: Request) -> dict[str, str]:
     headers: dict[str, str] = {}
@@ -266,9 +268,11 @@ def extract_auth(request: Request) -> dict[str, str]:
         headers["Authorization"] = auth
     return headers
 
+
 def create_ok_response(rpc_id: Any, result: Any) -> Response:
     body = json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result})
     return Response(content=body, media_type="application/json")
+
 
 def create_error_response(rpc_id: Any, code: int, message: str) -> Response:
     body = json.dumps(
@@ -280,6 +284,7 @@ def create_error_response(rpc_id: Any, code: int, message: str) -> Response:
     )
     # JSON-RPC errors are always HTTP 200 — status is in the error body
     return Response(content=body, media_type="application/json", status_code=200)
+
 
 def setup_fastapi_a2a(
     app: FastAPI,

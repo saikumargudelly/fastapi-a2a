@@ -53,6 +53,7 @@ class FastApiAdapter(BaseAdapter):
             if getattr(route, "response_model", None):
                 try:
                     from pydantic import TypeAdapter
+
                     out_schema = TypeAdapter(route.response_model).json_schema()
                 except Exception:
                     pass

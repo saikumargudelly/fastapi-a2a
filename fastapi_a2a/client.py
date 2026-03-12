@@ -170,7 +170,7 @@ class A2AClient:
         }
         payload = create_rpc_payload(
             "message/send",
-            {"message": message_adapter.dump_python(message, by_alias=True, exclude_none=True)}
+            {"message": message_adapter.dump_python(message, by_alias=True, exclude_none=True)},
         )
         return await self._rpc(payload)
 
@@ -220,6 +220,7 @@ class A2AClient:
             )
         return task_adapter.validate_python(body["result"])
 
+
 def create_rpc_payload(method: str, params: dict) -> dict:
     return {
         "jsonrpc": "2.0",
@@ -227,6 +228,7 @@ def create_rpc_payload(method: str, params: dict) -> dict:
         "method": method,
         "params": params,
     }
+
 
 def get_default_headers(auth_token: str | None = None) -> dict[str, str]:
     headers = {
@@ -236,6 +238,7 @@ def get_default_headers(auth_token: str | None = None) -> dict[str, str]:
     if auth_token:
         headers["Authorization"] = f"Bearer {auth_token}"
     return headers
+
 
 def create_a2a_client(
     base_url: str,

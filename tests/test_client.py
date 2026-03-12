@@ -67,6 +67,7 @@ async def test_client_default_headers(agent_client: AsyncClient) -> None:
     """FIX A3: asyncio imported at top-level — no dynamic imports in hot paths."""
     client = create_a2a_client("https://x.com", auth_token="tok")
     from fastapi_a2a.client import get_default_headers
+
     headers = get_default_headers(client._auth_token)
     assert headers["A2A-Version"] == "0.3.0"
     assert "Bearer tok" in headers["Authorization"]
