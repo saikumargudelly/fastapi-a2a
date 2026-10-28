@@ -114,8 +114,15 @@ def test_host_legacy_event_handlers_coexist_with_a2a_lifespan() -> None:
     events: list[str] = []
 
     app = FastAPI()
-    app.add_event_handler("startup", lambda: events.append("host_legacy_startup"))
-    app.add_event_handler("shutdown", lambda: events.append("host_legacy_shutdown"))
+    add_handler = getattr(app, "add_event_handler", None)
+    if not callable(add_handler):
+        add_handler = getattr(getattr(app, "router", None), "add_event_handler", None)
+
+    if not callable(add_handler):
+        pytest.skip("FastAPI version does not support event handlers")
+
+    add_handler("startup", lambda: events.append("host_legacy_startup"))
+    add_handler("shutdown", lambda: events.append("host_legacy_shutdown"))
 
     a2a = setup_fastapi_a2a(
         app,
