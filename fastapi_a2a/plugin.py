@@ -165,8 +165,19 @@ class FastApiA2A:
         else:
             self._adapter.mount(self._app, routes)
             # Fallback for legacy custom adapters: register event handlers for default-lifespan apps
-            self._app.add_event_handler("startup", self._on_startup)
-            self._app.add_event_handler("shutdown", self._on_shutdown)
+            add_event_handler = getattr(self._app, "add_event_handler", None)
+            if not callable(add_event_handler):
+                app_router = getattr(self._app, "router", None)
+                add_event_handler = getattr(app_router, "add_event_handler", None)
+
+            if callable(add_event_handler):
+                add_event_handler("startup", self._on_startup)
+                add_event_handler("shutdown", self._on_shutdown)
+            else:
+                raise RuntimeError(
+                    "Cannot register task store lifecycle: adapter does not support lifespan "
+                    "and the application does not support add_event_handler."
+                )
 
         self._is_mounted = True
 

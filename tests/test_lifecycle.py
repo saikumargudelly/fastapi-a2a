@@ -373,3 +373,46 @@ def test_legacy_adapter_without_lifespan_mount_succeeds() -> None:
         assert not store._evictor.done()
 
     assert store._evictor.done()
+
+
+def test_legacy_adapter_without_lifespan_or_event_handler_raises() -> None:
+    """
+    If an adapter lacks lifespan support and the app does not provide add_event_handler,
+    mount() fails explicitly rather than silently breaking lifecycle semantics.
+    """
+
+    class LegacyCustomAdapter(BaseAdapter):
+        def scan(self, app: Any) -> list[Any]:
+            return []
+
+        async def call(
+            self,
+            app: Any,
+            path: str,
+            payload: dict[str, Any],
+            headers: dict[str, str],
+        ) -> dict[str, Any]:
+            return {}
+
+        def mount(  # type: ignore[override]
+            self,
+            app: Any,
+            routes: list[tuple[str, Any, list[str]]],
+        ) -> None:
+            pass
+
+    class AppWithoutEventHandlers:
+        def __init__(self) -> None:
+            self.routes: list[Any] = []
+
+    app = AppWithoutEventHandlers()
+    a2a = FastApiA2A(
+        app,  # type: ignore[arg-type]
+        name="NoHandlerAgent",
+        url="https://agent.example.com",
+        skills=[],
+    )
+    a2a._adapter = LegacyCustomAdapter()
+
+    with pytest.raises(RuntimeError, match=r"Cannot register task store lifecycle"):
+        a2a.mount()
