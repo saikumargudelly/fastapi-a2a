@@ -37,7 +37,11 @@ pip install "fastapi-a2a[redis]"
 
 ### 1. Expose your application
 
-Imagine you have a straightforward summarisation endpoint. To make it discoverable on the A2A network, just add the `@a2a_skill` decorator and mount the plugin at the bottom of your file.
+Imagine you have a straightforward summarisation endpoint. To make it discoverable on the A2A network, add the `@a2a_skill` decorator and register the plugin.
+
+#### Option A: Automatic Setup (Recommended)
+
+`setup_fastapi_a2a()` creates the integration and automatically mounts the endpoints for you in a single step (do not call `a2a.mount()` afterwards):
 
 ```python
 from fastapi import FastAPI
@@ -51,11 +55,32 @@ app = FastAPI()
 async def summarise(req: dict) -> dict:
     return {"summary": "This is a summary of the text..."}
 
-# The integration
+# Automatically inspects routes and mounts A2A endpoints
 a2a = setup_fastapi_a2a(app, name="My NLP Tools", url="https://nlp.example.com")
 ```
 
-By calling `a2a.mount()`, the library automatically inspects your app, finds the decorated route, generates the standardised `AgentCard`, and opens up a `/a2a/rpc` endpoint to handle incoming agent requests.
+#### Option B: Explicit Two-Step Setup
+
+If you prefer to configure or inspect the `FastApiA2A` instance before mounting, instantiate `FastApiA2A` directly and call `a2a.mount()` once all routes are registered:
+
+```python
+from fastapi import FastAPI
+from fastapi_a2a import FastApiA2A, a2a_skill
+
+app = FastAPI()
+
+# Your existing, unchanged business logic
+@app.post("/summarise")
+@a2a_skill(description="Summarises long-form text into key bullet points.", tags=["nlp"])
+async def summarise(req: dict) -> dict:
+    return {"summary": "This is a summary of the text..."}
+
+# Explicit instantiation and manual mount
+a2a = FastApiA2A(app, name="My NLP Tools", url="https://nlp.example.com")
+a2a.mount()
+```
+
+Upon mounting, the library automatically inspects your app, finds the decorated route, generates the standardised `AgentCard`, and opens up a `/a2a/rpc` endpoint to handle incoming agent requests.
 
 ### 2. Communicate with other agents
 
@@ -91,7 +116,7 @@ async def translation_pipeline(req: dict) -> dict:
 
 If you are deploying `fastapi-a2a` via Gunicorn, Uvicorn workers, or Kubernetes Pods, you **must not** use the default `InMemoryTaskStore`. Memory stores do not sync state across processes—a task started on Worker A cannot be polled or completed by Worker B.
 
-For production, install the Redis extension and pass it during mounting:
+For production, install the Redis extension and pass it during setup:
 
 ```bash
 pip install "fastapi-a2a[redis]"

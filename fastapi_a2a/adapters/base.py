@@ -49,9 +49,12 @@ class BaseAdapter(ABC):
         self,
         app: Any,
         routes: list[tuple[str, Any, list[str]]],
+        *,
+        lifespan: Any = None,
     ) -> None:
         """
         Attach new routes onto the existing app.
         routes: list of (path, handler_coroutine, http_methods)
+        lifespan: optional asynccontextmanager lifespan handler
         Called once by FastApiA2A.mount().
         """

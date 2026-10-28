@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from fastapi_a2a import a2a_skill
+from fastapi_a2a import a2a_skill, setup_fastapi_a2a
 from fastapi_a2a.plugin import FastApiA2A
 
 
@@ -195,3 +195,37 @@ def test_existing_routes_unaffected(a2a_app: FastAPI) -> None:
         resp = c.post("/echo", json={"text": "world"})
     assert resp.status_code == 200
     assert resp.json()["text"] == "world"
+
+
+def test_streaming_true_raises_not_implemented() -> None:
+    """Explicitly passing streaming=True must raise NotImplementedError."""
+    app = FastAPI()
+    with pytest.raises(NotImplementedError, match=r"Streaming.*not currently supported"):
+        FastApiA2A(app, name="Test", url="https://x.com", streaming=True)
+
+    with pytest.raises(NotImplementedError, match=r"Streaming.*not currently supported"):
+        setup_fastapi_a2a(app, name="Test", url="https://x.com", streaming=True)
+
+
+def test_streaming_false_allowed() -> None:
+    """Default streaming=False or explicit streaming=False must be permitted."""
+    app = FastAPI()
+    a2a = FastApiA2A(app, name="Test", url="https://x.com", streaming=False)
+    assert a2a.card_builder._card["capabilities"]["streaming"] is False
+
+
+def test_push_notifications_true_raises_not_implemented() -> None:
+    """Explicitly passing push_notifications=True must raise NotImplementedError."""
+    app = FastAPI()
+    with pytest.raises(NotImplementedError, match=r"Push notifications.*not currently supported"):
+        FastApiA2A(app, name="Test", url="https://x.com", push_notifications=True)
+
+    with pytest.raises(NotImplementedError, match=r"Push notifications.*not currently supported"):
+        setup_fastapi_a2a(app, name="Test", url="https://x.com", push_notifications=True)
+
+
+def test_push_notifications_false_allowed() -> None:
+    """Default push_notifications=False or explicit push_notifications=False must be permitted."""
+    app = FastAPI()
+    a2a = FastApiA2A(app, name="Test", url="https://x.com", push_notifications=False)
+    assert a2a.card_builder._card["capabilities"]["pushNotifications"] is False

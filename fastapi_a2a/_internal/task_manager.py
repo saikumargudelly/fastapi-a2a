@@ -19,6 +19,7 @@ from typing import Any
 from fastapi_a2a._internal.constants import TERMINAL_STATES
 from fastapi_a2a._internal.exceptions import (
     A2AError,
+    InvalidStateTransitionError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -83,14 +84,42 @@ class TaskManager:
         skills: list[AgentSkill],
         timeout_seconds: float,
         max_concurrency: int,
+        max_queue_size: int | None = None,
     ) -> None:
         self._app = app
         self._adapter = adapter
         self._store = store
         self._skill_map = {s["id"]: s for s in skills}
         self._timeout = timeout_seconds
-        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._max_concurrency = max(1, max_concurrency)
+        self._max_queue_size = (
+            max(0, max_queue_size) if max_queue_size is not None else self._max_concurrency
+        )
+        self._max_capacity = self._max_concurrency + self._max_queue_size
+        self._semaphore = asyncio.Semaphore(self._max_concurrency)
         self._bg_tasks: set[asyncio.Task[Any]] = set()
+        self._active_tasks: dict[str, asyncio.Task[Any]] = {}
+
+    @property
+    def max_concurrency(self) -> int:
+        return self._max_concurrency
+
+    @property
+    def max_queue_size(self) -> int:
+        return self._max_queue_size
+
+    @property
+    def max_capacity(self) -> int:
+        return self._max_capacity
+
+    @property
+    def active_tasks(self) -> dict[str, asyncio.Task[Any]]:
+        """Return a snapshot mapping of task_id to active asyncio.Task instances."""
+        return dict(self._active_tasks)
+
+    def get_active_task(self, task_id: str) -> asyncio.Task[Any] | None:
+        """Return the active asyncio.Task for a task_id if currently scheduled or running."""
+        return self._active_tasks.get(task_id)
 
     # ── Public dispatch ───────────────────────────────────────────────────────
 
@@ -103,7 +132,7 @@ class TaskManager:
         Accept an incoming message, create a task, fire-and-forget execution.
         FIX D2: 'message' key validated by caller before reaching this method.
         """
-        if len(self._bg_tasks) >= self._semaphore._value * 2:
+        if len(self._bg_tasks) >= self._max_capacity:
             raise UnsupportedOperationError("Task queue overloaded. Please try again later.")
 
         message: Message = params["message"]
@@ -124,7 +153,13 @@ class TaskManager:
         # Store strong reference to prevent garbage collection mid-execution (RUF006)
         bg_task = asyncio.create_task(self._execute(task["id"], ctx))
         self._bg_tasks.add(bg_task)
-        bg_task.add_done_callback(self._bg_tasks.discard)
+        self._active_tasks[task["id"]] = bg_task
+
+        def _cleanup(t: asyncio.Task[Any]) -> None:
+            self._bg_tasks.discard(t)
+            self._active_tasks.pop(task["id"], None)
+
+        bg_task.add_done_callback(_cleanup)
         return task
 
     async def get_task(self, task_id: str) -> Task:
@@ -134,12 +169,38 @@ class TaskManager:
         return task
 
     async def cancel_task(self, task_id: str) -> Task:
+        """
+        Cancel a running or queued task.
+
+        Updates the task state in TaskStore to 'canceled' and cancels the
+        underlying asyncio.Task if active.
+
+        Note on non-cooperative tasks: Cancellation relies on standard cooperative
+        asyncio cancellation (yielding via await points). If an endpoint executes
+        blocking synchronous calls without yielding or catches BaseException to suppress
+        asyncio.CancelledError, the coroutine cannot be forcefully terminated by asyncio.
+        However, TaskManager guarantees that its stored state remains 'canceled' and any
+        subsequent artifacts or completion transitions from that coroutine are discarded.
+        """
         task = await self._store.get(task_id)
         if task is None:
             raise TaskNotFoundError(task_id)
         if task["status"]["state"] in TERMINAL_STATES:
             raise TaskNotCancelableError(task_id, task["status"]["state"])
-        return await self._store.update_status(task_id, "canceled")
+
+        try:
+            task = await self._store.update_status(task_id, "canceled")
+        except InvalidStateTransitionError:
+            latest = await self._store.get(task_id)
+            if latest is not None and latest["status"]["state"] in TERMINAL_STATES:
+                raise TaskNotCancelableError(task_id, latest["status"]["state"]) from None
+            raise
+
+        bg_task = self._active_tasks.get(task_id)
+        if bg_task is not None and not bg_task.done():
+            bg_task.cancel()
+
+        return task
 
     async def list_tasks(
         self,
@@ -162,40 +223,86 @@ class TaskManager:
         """
         Full task lifecycle. Always runs in an asyncio.Task (background).
         Guarantees the task ends in a terminal state, no matter what.
+        Prevents overwriting terminal states (e.g. 'canceled').
         """
-        async with self._semaphore:
-            try:
-                await self._store.update_status(task_id, "working")
-                artifacts = await asyncio.wait_for(
-                    self._call_skill(ctx),
-                    timeout=self._timeout,
-                )
-                for artifact in artifacts:
-                    await self._store.add_artifact(task_id, artifact)
-                await self._store.update_status(task_id, "completed")
+        try:
+            async with self._semaphore:
+                # 1. Check if task was already canceled while queued waiting for semaphore
+                current = await self._store.get(task_id)
+                if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                    return
 
-            except TimeoutError:
-                log.warning("Task %s timed out after %.1fs", task_id, self._timeout)
-                await self._store.update_status(task_id, "failed")
-            except UnsupportedOperationError:
-                log.warning("Task %s rejected — unknown skill %r", task_id, ctx.skill_id)
-                await self._store.update_status(task_id, "rejected")
-            except A2AError as exc:
-                log.warning("Task %s failed with A2AError: %s", task_id, exc)
-                await self._store.update_status(task_id, "failed")
-            except Exception as exc:
-                # FIX B4: catch-all MUST log; silent swallow was a debugging nightmare.
-                log.exception("Task %s failed with unexpected error", task_id)
-                error_artifact: Artifact = {
-                    "artifactId": str(uuid.uuid4()),
-                    "name": "Internal Error",
-                    "parts": [
-                        {"kind": "text", "text": "Task failed due to an internal system error."}
-                    ],
-                    "metadata": {"errorType": type(exc).__name__},
-                }
-                await self._store.add_artifact(task_id, error_artifact)
-                await self._store.update_status(task_id, "failed")
+                try:
+                    await self._store.update_status(task_id, "working")
+                    artifacts = await asyncio.wait_for(
+                        self._call_skill(ctx),
+                        timeout=self._timeout,
+                    )
+
+                    # 2. Check if task was canceled while executing the skill
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+
+                    for artifact in artifacts:
+                        current = await self._store.get(task_id)
+                        if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                            return
+                        await self._store.add_artifact(task_id, artifact)
+
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+                    await self._store.update_status(task_id, "completed")
+
+                except asyncio.CancelledError:
+                    log.info("Task %s execution canceled", task_id)
+                    raise
+
+                except TimeoutError:
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+                    log.warning("Task %s timed out after %.1fs", task_id, self._timeout)
+                    await self._store.update_status(task_id, "failed")
+
+                except UnsupportedOperationError:
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+                    log.warning("Task %s rejected — unknown skill %r", task_id, ctx.skill_id)
+                    await self._store.update_status(task_id, "rejected")
+
+                except A2AError as exc:
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+                    log.warning("Task %s failed with A2AError: %s", task_id, exc)
+                    await self._store.update_status(task_id, "failed")
+
+                except Exception as exc:
+                    current = await self._store.get(task_id)
+                    if current is not None and current["status"]["state"] in TERMINAL_STATES:
+                        return
+                    # FIX B4: catch-all MUST log; silent swallow was a debugging nightmare.
+                    log.exception("Task %s failed with unexpected error", task_id)
+                    error_artifact: Artifact = {
+                        "artifactId": str(uuid.uuid4()),
+                        "name": "Internal Error",
+                        "parts": [
+                            {"kind": "text", "text": "Task failed due to an internal system error."}
+                        ],
+                        "metadata": {"errorType": type(exc).__name__},
+                    }
+                    with contextlib.suppress(Exception):
+                        await self._store.add_artifact(task_id, error_artifact)
+                    with contextlib.suppress(Exception):
+                        await self._store.update_status(task_id, "failed")
+        finally:
+            self._active_tasks.pop(task_id, None)
+            current_t = asyncio.current_task()
+            if current_t is not None:
+                self._bg_tasks.discard(current_t)
 
     async def _call_skill(self, ctx: RequestContext) -> list[Artifact]:
         skill = self._skill_map.get(ctx.skill_id or "")

@@ -15,8 +15,11 @@ rather than rewriting the core engine.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -38,6 +41,7 @@ from fastapi_a2a._internal.schema import (
     task_adapter,
 )
 from fastapi_a2a._internal.task_manager import TaskManager
+from fastapi_a2a.adapters.base import BaseAdapter
 from fastapi_a2a.adapters.fastapi import FastApiAdapter
 from fastapi_a2a.stores.base import TaskStore
 from fastapi_a2a.stores.memory import InMemoryTaskStore
@@ -73,16 +77,26 @@ class FastApiA2A:
         # Execution limits
         timeout_seconds: float = 120.0,
         max_concurrency: int = 100,
+        max_queue_size: int | None = None,
         # Protocol options
         prefix: str = "/a2a",
     ) -> None:
+        if streaming:
+            raise NotImplementedError(
+                "Streaming (SSE) is not currently supported in fastapi-a2a. Set streaming=False."
+            )
+        if push_notifications:
+            raise NotImplementedError(
+                "Push notifications (webhooks) are not currently supported in fastapi-a2a. "
+                "Set push_notifications=False."
+            )
         self._app = app
         self._prefix = prefix.rstrip("/")
         self._store: TaskStore = store or InMemoryTaskStore()
         self._is_mounted = False
 
         # FIX B3: create adapter ONCE here; reuse in both __init__ and mount()
-        self._adapter = FastApiAdapter()
+        self._adapter: BaseAdapter = FastApiAdapter()
 
         # FIX A5: `is not None` — avoids treating [] as "not supplied"
         self._skills = skills if skills is not None else self._adapter.scan(app)
@@ -94,6 +108,7 @@ class FastApiA2A:
             skills=self._skills,
             timeout_seconds=timeout_seconds,
             max_concurrency=max_concurrency,
+            max_queue_size=max_queue_size,
         )
         self._card_builder = AgentCardBuilder(
             name=name,
@@ -130,21 +145,40 @@ class FastApiA2A:
         if self._is_mounted:
             raise RuntimeError("FastApiA2A.mount() already called on this application.")
 
-        # Register lifespan events
-        self._app.add_event_handler("startup", self._on_startup)
-        self._app.add_event_handler("shutdown", self._on_shutdown)
+        routes = [
+            ("/.well-known/agent.json", self._handle_card, ["GET"]),
+            (f"{self._prefix}/rpc", self._handle_rpc, ["POST"]),
+        ]
+
+        supports_lifespan = False
+        try:
+            sig = inspect.signature(self._adapter.mount)
+            supports_lifespan = "lifespan" in sig.parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
+        except (ValueError, TypeError):
+            supports_lifespan = False
 
         # FIX B3: reuse self._adapter — do NOT construct a second instance
-        self._adapter.mount(
-            self._app,
-            [
-                ("/.well-known/agent.json", self._handle_card, ["GET"]),
-                (f"{self._prefix}/rpc", self._handle_rpc, ["POST"]),
-            ],
-        )
+        if supports_lifespan:
+            self._adapter.mount(self._app, routes, lifespan=self._lifespan)
+        else:
+            self._adapter.mount(self._app, routes)
+            # Fallback for legacy custom adapters: register event handlers for default-lifespan apps
+            self._app.add_event_handler("startup", self._on_startup)
+            self._app.add_event_handler("shutdown", self._on_shutdown)
+
         self._is_mounted = True
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    @asynccontextmanager
+    async def _lifespan(self, app: FastAPI) -> AsyncIterator[None]:
+        await self._on_startup()
+        try:
+            yield
+        finally:
+            await self._on_shutdown()
 
     async def _on_startup(self) -> None:
         # FIX B2: call unconditionally — no isinstance check.
@@ -301,6 +335,7 @@ def setup_fastapi_a2a(
     state_transition_history: bool = True,
     timeout_seconds: float = 120.0,
     max_concurrency: int = 100,
+    max_queue_size: int | None = None,
     prefix: str = "/a2a",
 ) -> FastApiA2A:
     """
@@ -321,6 +356,7 @@ def setup_fastapi_a2a(
         state_transition_history=state_transition_history,
         timeout_seconds=timeout_seconds,
         max_concurrency=max_concurrency,
+        max_queue_size=max_queue_size,
         prefix=prefix,
     )
     a2a.mount()

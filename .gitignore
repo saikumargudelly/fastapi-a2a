@@ -76,7 +76,6 @@ site/
 # Stray ERD drafts, temporary notes, files with special chars in their names
 *.md'
 "fastapi-a2a-erd-final*"
-tests_critical/
 
 # Project specific ignores
 log.zip

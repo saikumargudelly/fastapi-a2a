@@ -13,12 +13,28 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
+try:
+    from fastapi.routing import iter_route_contexts  # type: ignore
+except ImportError:
+    iter_route_contexts = None  # type: ignore[assignment]
+
 from fastapi_a2a._internal.exceptions import A2AInternalError
 from fastapi_a2a._internal.schema import AgentSkill
 from fastapi_a2a.adapters.base import BaseAdapter
 
 
 class FastApiAdapter(BaseAdapter):
+    @staticmethod
+    def _iter_routes(app: FastAPI) -> Any:
+        if iter_route_contexts is not None:
+            for rc in iter_route_contexts(app.routes):
+                if isinstance(getattr(rc, "original_route", None), APIRoute):
+                    yield rc
+        else:
+            for route in app.routes:
+                if isinstance(route, APIRoute):
+                    yield route
+
     def scan(self, app: FastAPI) -> list[AgentSkill]:  # type: ignore[override]
         """
         Walk the FastAPI route tree.
@@ -26,9 +42,7 @@ class FastApiAdapter(BaseAdapter):
         Mounted sub-applications and WebSocket routes are ignored.
         """
         skills: list[AgentSkill] = []
-        for route in app.routes:
-            if not isinstance(route, APIRoute):
-                continue
+        for route in self._iter_routes(app):
             meta: dict | None = getattr(route.endpoint, "_a2a_skill", None)
 
             # FastAPI Routers wrap endpoints in Dependants. We must inspect the underlying call.
@@ -161,10 +175,12 @@ class FastApiAdapter(BaseAdapter):
         self,
         app: FastAPI,
         routes: list[tuple[str, Any, list[str]]],
+        *,
+        lifespan: Any = None,
     ) -> None:
         from fastapi.routing import APIRouter
 
-        router = APIRouter()
+        router = APIRouter(lifespan=lifespan)
         for path, handler, methods in routes:
             router.add_api_route(path, handler, methods=methods, include_in_schema=True)
         app.include_router(router)

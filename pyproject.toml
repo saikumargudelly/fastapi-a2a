@@ -1,6 +1,6 @@
 [project]
 name             = "fastapi-a2a"
-version          = "1.0.0"
+version          = "1.0.1"
 description      = "Make any FastAPI application A2A-capable — expose and consume agents"
 readme           = "README.md"
 license          = { text = "MIT" }
@@ -28,10 +28,9 @@ dependencies = [
 redis = ["redis>=5.0.0"]
 
 [project.urls]
-Homepage      = "https://github.com/yourorg/fastapi-a2a"
-Documentation = "https://fastapi-a2a.yourorg.com"
-Repository    = "https://github.com/yourorg/fastapi-a2a"
-Changelog     = "https://github.com/yourorg/fastapi-a2a/blob/main/CHANGELOG.md"
+Homepage   = "https://github.com/saikumargudelly/fastapi-a2a"
+Repository = "https://github.com/saikumargudelly/fastapi-a2a"
+Changelog  = "https://github.com/saikumargudelly/fastapi-a2a/blob/main/CHANGELOG.md"
 
 [build-system]
 requires      = ["hatchling"]
@@ -63,6 +62,9 @@ select = ["E", "W", "F", "I", "B", "C4", "UP", "RUF"]
 ignore = ["B008"]
 
 [tool.pyright]
+include          = ["fastapi_a2a"]
+venvPath         = "."
+venv             = ".venv"
 pythonVersion    = "3.11"
 typeCheckingMode = "standard"
 

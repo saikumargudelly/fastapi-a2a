@@ -22,8 +22,7 @@ async def pipeline(req: dict) -> dict:
     summary = text[:100] + ("..." if len(text) > 100 else "")
 
     # Step 2 — call a completely separate A2A agent.
-    # send_task() blocks until the remote task reaches a terminal state.
-    # Raises TimeoutError after poll_timeout_seconds (default 300s).
+    # Dispatches the task, then polls until the remote task reaches a terminal state.
     async with A2AClient(
         "https://translation-agent.example.com",
         poll_timeout_seconds=30,
@@ -33,6 +32,7 @@ async def pipeline(req: dict) -> dict:
             skill_id="translate",
             data={"target_lang": req.get("target_lang", "fr")},
         )
+        task = await agent.poll_task_status(task["id"])
 
     translation = (
         task["artifacts"][0]["parts"][0]["data"].get("translated", "") if task["artifacts"] else ""

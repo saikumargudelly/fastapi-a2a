@@ -44,16 +44,19 @@ from fastapi_a2a._internal.schema import (
     TaskStatus,
     TextPart,
 )
-from fastapi_a2a.client import create_a2a_client
+from fastapi_a2a.client import A2AClient, create_a2a_client
 from fastapi_a2a.decorators import a2a_skill
-from fastapi_a2a.plugin import setup_fastapi_a2a
+from fastapi_a2a.plugin import FastApiA2A, setup_fastapi_a2a
+from fastapi_a2a.stores.base import TaskStore
+from fastapi_a2a.stores.memory import InMemoryTaskStore
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 __all__ = [
     "PROTOCOL_VERSION",
     "TERMINAL_STATES",
     "VALID_TRANSITIONS",
+    "A2AClient",
     "A2AError",
     "A2AInternalError",
     "A2ARemoteError",
@@ -64,9 +67,11 @@ __all__ = [
     "Artifact",
     "AuthRequiredError",
     "DataPart",
+    "FastApiA2A",
     "FilePart",
     "FileWithBytes",
     "FileWithUri",
+    "InMemoryTaskStore",
     "InvalidStateTransitionError",
     "Message",
     "OAuthFlows",
@@ -79,6 +84,7 @@ __all__ = [
     "TaskNotFoundError",
     "TaskState",
     "TaskStatus",
+    "TaskStore",
     "TextPart",
     "UnsupportedOperationError",
     "VersionNotSupportedError",

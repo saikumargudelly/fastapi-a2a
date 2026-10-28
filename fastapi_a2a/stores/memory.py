@@ -41,15 +41,17 @@ class InMemoryTaskStore(TaskStore):
 
     async def start(self) -> None:
         """Start TTL eviction loop. Called by FastApiA2A on app startup."""
+        if self._evictor is not None and not self._evictor.done():
+            return
         self._evictor = asyncio.create_task(self._evict_loop())
 
     async def stop(self) -> None:
         """Cancel eviction loop. Called by FastApiA2A on app shutdown."""
-        if self._evictor:
+        if self._evictor is not None and not self._evictor.done():
             self._evictor.cancel()
             try:
                 await self._evictor
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, Exception):
                 pass
 
     async def _evict_loop(self) -> None:
