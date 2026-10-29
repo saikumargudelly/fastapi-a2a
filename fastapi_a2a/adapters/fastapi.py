@@ -29,11 +29,26 @@ class FastApiAdapter(BaseAdapter):
     @staticmethod
     def _iter_routes(app: FastAPI) -> Iterator[tuple[APIRoute, str]]:
         if iter_route_contexts is not None:
-            for rc in iter_route_contexts(app.routes):
-                orig = getattr(rc, "original_route", None) or getattr(rc, "route", None)
-                if isinstance(orig, APIRoute):
-                    path = getattr(rc, "path", None) or orig.path
-                    yield orig, path
+            ctx_iter = iter_route_contexts
+
+            def _walk_contexts(
+                routes: Sequence[BaseRoute], prefix: str = ""
+            ) -> Iterator[tuple[APIRoute, str]]:
+                for rc in ctx_iter(routes):
+                    orig = getattr(rc, "original_route", None) or getattr(rc, "route", None)
+                    if isinstance(orig, APIRoute):
+                        path = getattr(rc, "path", None) or orig.path
+                        full_path = f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+                        yield orig, full_path if full_path.startswith("/") else f"/{full_path}"
+                    elif isinstance(orig, Mount):
+                        sub_app = getattr(orig, "app", None)
+                        sub_routes = getattr(sub_app, "routes", None)
+                        if isinstance(sub_routes, Sequence):
+                            mount_path = getattr(rc, "path", None) or getattr(orig, "path", "")
+                            sub_prefix = f"{prefix.rstrip('/')}/{mount_path.lstrip('/')}"
+                            yield from _walk_contexts(sub_routes, sub_prefix)
+
+            yield from _walk_contexts(app.routes)
         else:
 
             def _walk(
@@ -41,12 +56,13 @@ class FastApiAdapter(BaseAdapter):
             ) -> Iterator[tuple[APIRoute, str]]:
                 for r in routes:
                     if isinstance(r, APIRoute):
-                        yield r, f"{prefix.rstrip('/')}{r.path}"
+                        full_path = f"{prefix.rstrip('/')}/{r.path.lstrip('/')}"
+                        yield r, full_path if full_path.startswith("/") else f"/{full_path}"
                     elif isinstance(r, Mount):
                         sub_app = getattr(r, "app", None)
                         sub_routes = getattr(sub_app, "routes", None)
                         if isinstance(sub_routes, Sequence):
-                            sub_prefix = f"{prefix.rstrip('/')}{r.path.rstrip('/')}"
+                            sub_prefix = f"{prefix.rstrip('/')}/{r.path.lstrip('/')}"
                             yield from _walk(sub_routes, sub_prefix)
 
             yield from _walk(app.routes)
