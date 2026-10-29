@@ -1,8 +1,7 @@
 # fastapi-a2a
 
-[![CI](https://github.com/saikumargudelly/fastapi-a2a/actions/workflows/ci.yml/badge.svg)](https://github.com/saikumargudelly/fastapi-a2a/actions)
-[![PyPI](https://img.shields.io/pypi/v/fastapi-a2a.svg)](https://pypi.org/project/fastapi-a2a/)
-[![Python](https://img.shields.io/pypi/pyversions/fastapi-a2a.svg)](https://pypi.org/project/fastapi-a2a/)
+[![PyPI](https://img.shields.io/badge/pypi-v1.0.1-blue?logo=pypi&logoColor=white)](https://pypi.org/project/fastapi-a2a/)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue?logo=python&logoColor=white)](https://pypi.org/project/fastapi-a2a/)
 [![A2A Protocol](https://img.shields.io/badge/A2A-1.0.0-blue.svg)](https://github.com/saikumargudelly/fastapi-a2a)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -25,6 +24,9 @@ Instead of writing custom RPC dispatchers, message brokers, or separate microser
 ---
 
 ## Installation
+
+> **Supported Python**: `Python >= 3.11` (fully tested across `3.11`, `3.12`, `3.13`)  
+> **PyPI Package**: [`fastapi-a2a` v1.0.1](https://pypi.org/project/fastapi-a2a/)
 
 Install using `pip` or `uv`:
 
