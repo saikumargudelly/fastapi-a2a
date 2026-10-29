@@ -128,7 +128,9 @@ class A2AClient:
                 "A2AClient must be used as an async context manager: "
                 "async with A2AClient(...) as client"
             )
-        response = await self._http.get("/.well-known/agent.json")
+        response = await self._http.get("/.well-known/agent-card.json")
+        if response.status_code == 404:
+            response = await self._http.get("/.well-known/agent.json")
         response.raise_for_status()
         self._card_cache = agent_card_adapter.validate_json(response.content)
         self._card_fetched = now
@@ -208,7 +210,20 @@ class A2AClient:
                 "A2AClient must be used as an async context manager: "
                 "async with A2AClient(...) as client"
             )
-        response = await self._http.post("/a2a/rpc", json=payload)
+        rpc_path = "/a2a/rpc"
+        if self._card_cache is not None:
+            interfaces = self._card_cache.get("supportedInterfaces") or []
+            for iface in interfaces:
+                if iface.get("protocolBinding") == "JSONRPC":
+                    raw_url = iface.get("url", "")
+                    if raw_url:
+                        from urllib.parse import urlparse
+
+                        parsed = urlparse(raw_url)
+                        if parsed.path:
+                            rpc_path = parsed.path
+                    break
+        response = await self._http.post(rpc_path, json=payload)
         response.raise_for_status()
         body = response.json()
         if "error" in body:

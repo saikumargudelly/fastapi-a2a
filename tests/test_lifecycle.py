@@ -366,8 +366,9 @@ def test_legacy_adapter_without_lifespan_mount_succeeds() -> None:
     a2a.mount()
 
     # Verify routes were mounted
-    assert len(mounted_routes) == 2
+    assert len(mounted_routes) == 3
     paths = [r[0] for r in mounted_routes]
+    assert "/.well-known/agent-card.json" in paths
     assert "/.well-known/agent.json" in paths
     assert "/a2a/rpc" in paths
 

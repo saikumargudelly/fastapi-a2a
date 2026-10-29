@@ -8,10 +8,12 @@ The only file in this package that imports from fastapi directly.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from starlette.routing import BaseRoute, Mount
 
 try:
     from fastapi.routing import iter_route_contexts  # type: ignore
@@ -25,24 +27,38 @@ from fastapi_a2a.adapters.base import BaseAdapter
 
 class FastApiAdapter(BaseAdapter):
     @staticmethod
-    def _iter_routes(app: FastAPI) -> Any:
+    def _iter_routes(app: FastAPI) -> Iterator[tuple[APIRoute, str]]:
         if iter_route_contexts is not None:
             for rc in iter_route_contexts(app.routes):
-                if isinstance(getattr(rc, "original_route", None), APIRoute):
-                    yield rc
+                orig = getattr(rc, "original_route", None) or getattr(rc, "route", None)
+                if isinstance(orig, APIRoute):
+                    path = getattr(rc, "path", None) or orig.path
+                    yield orig, path
         else:
-            for route in app.routes:
-                if isinstance(route, APIRoute):
-                    yield route
+
+            def _walk(
+                routes: Sequence[BaseRoute], prefix: str = ""
+            ) -> Iterator[tuple[APIRoute, str]]:
+                for r in routes:
+                    if isinstance(r, APIRoute):
+                        yield r, f"{prefix.rstrip('/')}{r.path}"
+                    elif isinstance(r, Mount):
+                        sub_app = getattr(r, "app", None)
+                        sub_routes = getattr(sub_app, "routes", None)
+                        if isinstance(sub_routes, Sequence):
+                            sub_prefix = f"{prefix.rstrip('/')}{r.path.rstrip('/')}"
+                            yield from _walk(sub_routes, sub_prefix)
+
+            yield from _walk(app.routes)
 
     def scan(self, app: FastAPI) -> list[AgentSkill]:  # type: ignore[override]
         """
         Walk the FastAPI route tree.
-        Only APIRoute instances with _a2a_skill metadata are returned.
-        Mounted sub-applications and WebSocket routes are ignored.
+        Only APIRoute instances with _a2a_skill or openapi_extra metadata are returned.
+        WebSocket routes and undecorated routes are ignored.
         """
         skills: list[AgentSkill] = []
-        for route in self._iter_routes(app):
+        for route, full_path in self._iter_routes(app):
             meta: dict | None = getattr(route.endpoint, "_a2a_skill", None)
 
             # FastAPI Routers wrap endpoints in Dependants. We must inspect the underlying call.
@@ -50,13 +66,22 @@ class FastApiAdapter(BaseAdapter):
                 if getattr(route.dependant, "call", None):
                     meta = getattr(route.dependant.call, "_a2a_skill", None)
 
+            # Support native openapi_extra={"a2a": {...}}
+            if meta is None and getattr(route, "openapi_extra", None):
+                extra = route.openapi_extra
+                if isinstance(extra, dict):
+                    if "a2a" in extra and isinstance(extra["a2a"], dict):
+                        meta = extra["a2a"]
+                    elif "a2a_skill" in extra and isinstance(extra["a2a_skill"], dict):
+                        meta = extra["a2a_skill"]
+
             if meta is None:
                 continue
 
             allowed_methods = {"GET", "POST", "PUT", "DELETE", "PATCH"}
             if not route.methods or not any(m in route.methods for m in allowed_methods):
                 raise ValueError(
-                    f"Route {route.path} decorated with @a2a_skill must support GET, "
+                    f"Route {full_path} decorated with @a2a_skill must support GET, "
                     "POST, PUT, DELETE, or PATCH"
                 )
 
@@ -80,7 +105,7 @@ class FastApiAdapter(BaseAdapter):
                 "examples": list(meta.get("examples") or []),
                 "inputModes": ["application/json"],
                 "outputModes": ["application/json"],
-                "endpoint": f"{primary_method} {route.path}",  # internal — stripped before wire
+                "endpoint": f"{primary_method} {full_path}",
             }
             if out_schema:
                 skill["outputSchema"] = out_schema

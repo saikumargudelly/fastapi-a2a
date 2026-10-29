@@ -51,6 +51,7 @@ dev = [
     "coverage[toml]>=7.0",
     "redis>=5.0.0",
     "uvicorn[standard]>=0.30",
+    "jsonschema>=4.26.0",
 ]
 
 [tool.ruff]

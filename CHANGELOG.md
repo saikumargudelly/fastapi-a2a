@@ -7,16 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.1] — 2026-10-28
+## [1.0.1] — 2026-10-29
 
 ### Fixed
-- Fixed route discovery in `FastApiAdapter.scan()` to traverse included and nested `APIRouter` instances using `iter_route_contexts` with backward-compatible fallback for FastAPI <0.115.1.
-- Fixed task store lifecycle management (`start()` / `stop()`) by mounting endpoints with Starlette router lifespans, ensuring task stores start and cleanly shutdown when the host application uses a custom lifespan.
+- Fixed route discovery in `FastApiAdapter.scan()` to unpack `original_route` from `iter_route_contexts` correctly, traverse mounted sub-applications recursively, and discover `openapi_extra` declarations.
+- Fixed task store lifecycle management (`start()` / `stop()`) by mounting endpoints with Starlette router lifespans and guarded fallback for legacy custom adapters.
 - Fixed `RedisTaskStore` by implementing the missing `create()`, `start()`, `stop()`, and `aclose()` methods required by the `TaskStore` abstract interface.
 - Fixed task queue capacity and overload handling in `TaskManager` by replacing the dynamic semaphore permit threshold with a stable `max_queue_size` capacity bound.
 - Fixed task cancellation propagation in `TaskManager` to cancel underlying `asyncio.Task` coroutines, release concurrency resources upon termination, and prevent completed/failed status transitions from overwriting terminal `canceled` states.
 
 ### Added
+- Aligned Agent Card discovery with official A2A 1.0.0 specification:
+  - Added `supportedInterfaces` specifying protocol bindings (`JSONRPC`), protocol versions (`1.0`), and interface URLs.
+  - Added canonical discovery endpoint `/.well-known/agent-card.json` while maintaining backward-compatible `/.well-known/agent.json`.
+  - Added strict JSON Schema validation test suite against official A2A 1.0.0 AgentCard schema.
 - Top-level public exports for `FastApiA2A`, `A2AClient`, `TaskStore`, and `InMemoryTaskStore` in `fastapi_a2a`.
 - Regression test suites for cancellation, concurrency, lifecycle, quickstart, Redis store, route discovery, and critical stress scenarios.
 

@@ -31,7 +31,16 @@ class AgentProvider(TypedDict):
 class AgentCapabilities(TypedDict, total=False):
     streaming: bool
     pushNotifications: bool
+    extendedAgentCard: bool
     stateTransitionHistory: bool
+    extensions: list[str]
+
+
+class AgentInterface(TypedDict):
+    url: str
+    protocolBinding: Literal["JSONRPC", "GRPC", "HTTP+JSON"] | str
+    protocolVersion: str
+    tenant: NotRequired[str]
 
 
 class AgentSkill(TypedDict):
@@ -42,6 +51,7 @@ class AgentSkill(TypedDict):
     outputModes: list[str]
     tags: NotRequired[list[str]]
     examples: NotRequired[list[str]]
+    inputSchema: NotRequired[dict[str, Any]]
     outputSchema: NotRequired[dict[str, Any]]
     endpoint: NotRequired[str]  # internal routing — stripped before wire
 
@@ -74,14 +84,15 @@ class SecurityScheme(TypedDict):
 
 class AgentCard(TypedDict):
     name: str
-    url: str
+    description: str
     version: str
-    protocolVersion: str
     capabilities: AgentCapabilities
     skills: list[AgentSkill]
     defaultInputModes: list[str]
     defaultOutputModes: list[str]
-    description: NotRequired[str]
+    supportedInterfaces: NotRequired[list[AgentInterface]]
+    url: NotRequired[str]
+    protocolVersion: NotRequired[str]
     provider: NotRequired[AgentProvider]
     documentationUrl: NotRequired[str]
     iconUrl: NotRequired[str]

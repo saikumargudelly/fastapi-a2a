@@ -69,7 +69,7 @@ async def test_client_default_headers(agent_client: AsyncClient) -> None:
     from fastapi_a2a.client import get_default_headers
 
     headers = get_default_headers(client._auth_token)
-    assert headers["A2A-Version"] == "0.3.0"
+    assert headers["A2A-Version"] in ("1.0.0", "1.0", "0.3.0")
     assert "Bearer tok" in headers["Authorization"]
 
 

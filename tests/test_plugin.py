@@ -14,12 +14,21 @@ from fastapi_a2a.plugin import FastApiA2A
 
 @pytest.mark.asyncio
 async def test_agent_card_endpoint(client: AsyncClient) -> None:
-    resp = await client.get("/.well-known/agent.json")
+    # Test canonical A2A 1.0.0 path
+    resp = await client.get("/.well-known/agent-card.json")
     assert resp.status_code == 200
     card = resp.json()
     assert card["name"] == "Test Agent"
-    assert card["protocolVersion"] == "0.3.0"
+    assert card["protocolVersion"] in ("1.0.0", "1.0")
     assert "skills" in card
+    assert "supportedInterfaces" in card
+    assert len(card["supportedInterfaces"]) == 1
+    assert card["supportedInterfaces"][0]["protocolBinding"] == "JSONRPC"
+
+    # Test legacy path backward compatibility
+    legacy_resp = await client.get("/.well-known/agent.json")
+    assert legacy_resp.status_code == 200
+    assert legacy_resp.json() == card
 
 
 @pytest.mark.asyncio

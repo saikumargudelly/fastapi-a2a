@@ -73,9 +73,10 @@ def test_file_with_bytes_uses_content_field() -> None:
 def test_agent_card_round_trip() -> None:
     card: AgentCard = {
         "name": "NLP Agent",
+        "description": "NLP Agent",
         "url": "https://nlp.example.com",
         "version": "1.0.0",
-        "protocolVersion": "0.3.0",
+        "protocolVersion": "1.0.0",
         "capabilities": {"streaming": False},
         "skills": [],
         "defaultInputModes": ["application/json"],
@@ -83,7 +84,7 @@ def test_agent_card_round_trip() -> None:
     }
     raw = agent_card_adapter.dump_python(card, by_alias=True, exclude_none=True)
     assert raw["name"] == "NLP Agent"
-    assert raw["protocolVersion"] == "0.3.0"
+    assert raw["protocolVersion"] == "1.0.0"
 
 
 def test_agent_card_optional_fields_excluded() -> None:

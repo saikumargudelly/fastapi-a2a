@@ -26,8 +26,10 @@ from fastapi import FastAPI, Request, Response
 
 from fastapi_a2a._internal.card import AgentCardBuilder
 from fastapi_a2a._internal.constants import (
+    CANONICAL_CARD_PATH,
     INTERNAL_ERROR,
     INVALID_PARAMS,
+    LEGACY_CARD_PATH,
     METHOD_NOT_FOUND,
     PARSE_ERROR,
     SUPPORTED_VERSIONS,
@@ -91,6 +93,7 @@ class FastApiA2A:
                 "Set push_notifications=False."
             )
         self._app = app
+        self._url = url
         self._prefix = prefix.rstrip("/")
         self._store: TaskStore = store or InMemoryTaskStore()
         self._is_mounted = False
@@ -146,7 +149,8 @@ class FastApiA2A:
             raise RuntimeError("FastApiA2A.mount() already called on this application.")
 
         routes = [
-            ("/.well-known/agent.json", self._handle_card, ["GET"]),
+            (CANONICAL_CARD_PATH, self._handle_card, ["GET"]),
+            (LEGACY_CARD_PATH, self._handle_card, ["GET"]),
             (f"{self._prefix}/rpc", self._handle_rpc, ["POST"]),
         ]
 
@@ -180,6 +184,26 @@ class FastApiA2A:
                 )
 
         self._is_mounted = True
+        rpc_endpoint = f"{self._url.rstrip('/')}{self._prefix}/rpc"
+        self._card_builder.set_supported_interfaces(
+            [
+                {
+                    "url": rpc_endpoint,
+                    "protocolBinding": "JSONRPC",
+                    "protocolVersion": "1.0",
+                }
+            ]
+        )
+        rpc_endpoint = f"{self._url.rstrip('/')}{self._prefix}/rpc"
+        self._card_builder.set_supported_interfaces(
+            [
+                {
+                    "url": rpc_endpoint,
+                    "protocolBinding": "JSONRPC",
+                    "protocolVersion": "1.0",
+                }
+            ]
+        )
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

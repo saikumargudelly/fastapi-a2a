@@ -11,8 +11,14 @@ from typing import Final, Literal, get_args
 
 # ── Protocol version ──────────────────────────────────────────────────────────
 
-PROTOCOL_VERSION: Final = "0.3.0"
-SUPPORTED_VERSIONS: Final = frozenset({"0.3.0"})
+PROTOCOL_VERSION: Final = "1.0.0"
+SUPPORTED_VERSIONS: Final = frozenset({"1.0.0", "1.0", "0.3.0"})
+
+# ── Canonical and Legacy Discovery Endpoints ─────────────────────────────────
+
+CANONICAL_CARD_PATH: Final = "/.well-known/agent-card.json"
+LEGACY_CARD_PATH: Final = "/.well-known/agent.json"
+DEFAULT_RPC_PATH: Final = "/a2a/rpc"
 
 # ── JSON-RPC 2.0 standard error codes ────────────────────────────────────────
 
