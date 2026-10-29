@@ -1,157 +1,258 @@
 # fastapi-a2a
 
-A seamless, zero-friction plugin that transforms any existing FastAPI application into a fully compliant Agent-to-Agent (A2A) node.
+[![CI](https://github.com/saikumargudelly/fastapi-a2a/actions/workflows/ci.yml/badge.svg)](https://github.com/saikumargudelly/fastapi-a2a/actions)
+[![PyPI](https://img.shields.io/pypi/v/fastapi-a2a.svg)](https://pypi.org/project/fastapi-a2a/)
+[![Python](https://img.shields.io/pypi/pyversions/fastapi-a2a.svg)](https://pypi.org/project/fastapi-a2a/)
+[![A2A Protocol](https://img.shields.io/badge/A2A-1.0.0-blue.svg)](https://github.com/saikumargudelly/fastapi-a2a)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Instead of writing custom bridging code or setting up new infrastructure to let AI agents talk to each other, `fastapi-a2a` hooks directly into your application's existing routing. It exposes your regular HTTP endpoints as discoverable "skills" and allows your internal systems to natively communicate with external A2A nodes.
+**fastapi-a2a** turns any existing [FastAPI](https://fastapi.tiangolo.com/) application into a standards-compliant **Agent-to-Agent (A2A)** node.
 
-[![PyPI](https://img.shields.io/pypi/v/fastapi-a2a)](#)
-[![Python](https://img.shields.io/pypi/pyversions/fastapi-a2a)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+Instead of writing custom RPC dispatchers, message brokers, or separate microservices to connect AI agents, `fastapi-a2a` introspects your FastAPI route topology and exposes your endpoints as discoverable A2A skills through an ASGI-native dispatch pipeline—with zero network loopback overhead.
 
-## Why use this?
+---
 
-When you're building systems that involve multiple AI agents, you eventually run into a communication problem. How does Agent A (say, an NLP classifier) ask Agent B (a database RAG system) for context? 
+## Key Features
 
-The A2A protocol solves this by standardising discovery, capability negotiation, and task execution. This library implements that standard natively for FastAPI. It lets you do two things:
+- **A2A 1.0.0 Compliant**: Implements the official Agent-to-Agent specification. Serves the canonical `/.well-known/agent-card.json` manifest (with backward compatibility for `/.well-known/agent.json`) and advertises active `supportedInterfaces` (JSON-RPC 2.0).
+- **Zero-Hop ASGI Execution**: Inbound agent task invocations bypass external HTTP sockets and are routed directly to FastAPI endpoints through ASGI memory channels.
+- **Non-Destructive & Opt-In**: Existing REST/HTTP endpoints, Swagger docs, webhooks, and middlewares remain 100% intact and unchanged.
+- **Flexible Skill Discovery**: Expose skills via the passive `@a2a_skill` decorator or native FastAPI `openapi_extra={"a2a": {...}}`. Fully supports root routes, nested `APIRouter`s, and mounted sub-applications.
+- **Production Persistence**: Ships with an in-memory task store with TTL eviction for single-instance deployments and a robust `RedisTaskStore` for distributed worker clusters.
+- **Full Task Lifecycle & Safety**: Handles asynchronous task queuing, status polling, timeout enforcement, bounded capacity limits, and cooperative task cancellation.
+- **Outbound Agent Client**: Built-in async `A2AClient` with automatic remote Agent Card discovery, dynamic interface routing, and SSRF protection.
 
-1. **Become an A2A Agent**: By adding a single decorator to your existing FastAPI routes, they are automatically published to an `/.well-known/agent.json` card. Other agents on the network can discover your application and invoke those routes via a standard JSON-RPC interface.
-2. **Consume other Agents**: You can use the built-in `A2AClient` within your existing route handlers to pause your local execution, delegate a sub-task to a remote agent, wait for its completion, and resume seamlessly.
-
-It requires zero changes to your actual business logic. Your existing frontend clients and webhooks will continue hitting the standard REST endpoints exactly as they did before.
+---
 
 ## Installation
 
-You can install the core library via pip. It depends strictly on `fastapi`, `pydantic`, and `httpx`.
+Install using `pip` or `uv`:
 
 ```bash
+# Core package (FastAPI, Pydantic, HTTPX)
 pip install fastapi-a2a
-```
 
-If you plan to run multiple uvicorn workers and need tasks to persist across process boundaries, we include an optional Redis-backed store:
-
-```bash
+# With Redis task store support for multi-worker deployments
 pip install "fastapi-a2a[redis]"
 ```
 
-## Quick Start
+Using `uv`:
 
-### 1. Expose your application
+```bash
+uv add fastapi-a2a
+# Or with Redis:
+uv add "fastapi-a2a[redis]"
+```
 
-Imagine you have a straightforward summarisation endpoint. To make it discoverable on the A2A network, add the `@a2a_skill` decorator and register the plugin.
+---
 
-#### Option A: Automatic Setup (Recommended)
+## Quickstart
 
-`setup_fastapi_a2a()` creates the integration and automatically mounts the endpoints for you in a single step (do not call `a2a.mount()` afterwards):
+### 1. Exposing Skills (Agent Node)
+
+Add the `@a2a_skill` decorator to any route and initialize `fastapi-a2a` with `setup_fastapi_a2a`:
 
 ```python
 from fastapi import FastAPI
-from fastapi_a2a import setup_fastapi_a2a, a2a_skill
+from pydantic import BaseModel
+from fastapi_a2a import a2a_skill, setup_fastapi_a2a
 
-app = FastAPI()
+app = FastAPI(title="NLP Agent")
 
-# Your existing, unchanged business logic
-@app.post("/summarise")
-@a2a_skill(description="Summarises long-form text into key bullet points.", tags=["nlp"])
-async def summarise(req: dict) -> dict:
-    return {"summary": "This is a summary of the text..."}
 
-# Automatically inspects routes and mounts A2A endpoints
-a2a = setup_fastapi_a2a(app, name="My NLP Tools", url="https://nlp.example.com")
+class SummarizeRequest(BaseModel):
+    document: str
+    max_bullets: int = 5
+
+
+class SummarizeResponse(BaseModel):
+    summary: list[str]
+
+
+# Your standard, unchanged FastAPI endpoint
+@app.post("/summarize", response_model=SummarizeResponse)
+@a2a_skill(
+    name="Summarization",
+    description="Summarizes text into key bullet points.",
+    tags=["nlp", "summarization"],
+    examples=["Summarize quarterly earnings report."],
+)
+async def summarize(payload: SummarizeRequest) -> SummarizeResponse:
+    # Your regular business logic
+    bullets = [f"Key point from: {payload.document[:30]}..."]
+    return SummarizeResponse(summary=bullets)
+
+
+# Automatically inspects routes, builds Agent Card, and mounts /a2a/rpc
+setup_fastapi_a2a(
+    app,
+    name="Summarizer Node",
+    url="https://agent.example.com",
+    version="1.0.0",
+    description="Agent capable of summarizing text documents.",
+)
 ```
 
-#### Option B: Explicit Two-Step Setup
+Once mounted, the application automatically serves:
+- `GET /.well-known/agent-card.json` (A2A 1.0.0 canonical discovery)
+- `GET /.well-known/agent.json` (Backward-compatible discovery)
+- `POST /a2a/rpc` (JSON-RPC 2.0 task dispatcher)
 
-If you prefer to configure or inspect the `FastApiA2A` instance before mounting, instantiate `FastApiA2A` directly and call `a2a.mount()` once all routes are registered:
+#### Alternative: Native `openapi_extra` Declaration
+
+You can also expose skills without importing `@a2a_skill` by declaring metadata directly in `openapi_extra`:
 
 ```python
-from fastapi import FastAPI
-from fastapi_a2a import FastApiA2A, a2a_skill
-
-app = FastAPI()
-
-# Your existing, unchanged business logic
-@app.post("/summarise")
-@a2a_skill(description="Summarises long-form text into key bullet points.", tags=["nlp"])
-async def summarise(req: dict) -> dict:
-    return {"summary": "This is a summary of the text..."}
-
-# Explicit instantiation and manual mount
-a2a = FastApiA2A(app, name="My NLP Tools", url="https://nlp.example.com")
-a2a.mount()
+@app.post(
+    "/analyze",
+    openapi_extra={
+        "a2a": {
+            "name": "Text Analysis",
+            "description": "Performs sentiment and entity extraction.",
+            "tags": ["analysis"],
+        }
+    },
+)
+async def analyze(data: dict) -> dict:
+    return {"sentiment": "positive"}
 ```
 
-Upon mounting, the library automatically inspects your app, finds the decorated route, generates the standardised `AgentCard`, and opens up a `/a2a/rpc` endpoint to handle incoming agent requests.
+---
 
-### 2. Communicate with other agents
+### 2. Invoking Remote Agents (Outbound Client)
 
-If your application needs to delegate work to an external system, you don't need to manually poll HTTP endpoints. The `A2AClient` handles the lifecycle for you.
+Use `A2AClient` within your existing route handlers or background jobs to delegate tasks to external A2A agents:
 
 ```python
 from fastapi_a2a import create_a2a_client
 
-@app.post("/pipeline")
-async def translation_pipeline(req: dict) -> dict:
-    # 1. Do some local processing first
-    local_summary = await do_local_work(req["document"])
 
-    # 2. Delegate the translation step to an external specialised agent
-    async with create_a2a_client("https://translation-agent.example.com") as client:
-        # This will dispatch the payload and return the Task ID immediately
+async def run_remote_task() -> dict:
+    async with create_a2a_client("https://translation.example.com") as client:
+        # 1. Fetch remote agent capabilities (cached automatically)
+        card = await client.get_card()
+        print(f"Connected to {card['name']} (version {card['version']})")
+
+        # 2. Dispatch task via message/send (returns Task in 'submitted' state)
         task = await client.send_task(
-            text=local_summary,
+            text="Hello world",
             skill_id="translate",
-            data={"target_lang": "es"}
+            data={"target_lang": "fr"},
         )
-        
-        # 3. Explicitly poll the remote store until completion
-        task = await client.poll_task_status(task["id"])
-        
-        # Extract the final output from the remote agent's artifacts
-        translation = task["artifacts"][0]["parts"][0]["data"]["text"]
 
-    return {"final_translation": translation}
+        # 3. Explicitly poll task status until terminal state
+        completed_task = await client.poll_task_status(task["id"])
+
+        # 4. Extract result artifacts
+        return completed_task["artifacts"][0]["parts"][0]["data"]
 ```
+
+---
 
 ## Production Deployment
 
-If you are deploying `fastapi-a2a` via Gunicorn, Uvicorn workers, or Kubernetes Pods, you **must not** use the default `InMemoryTaskStore`. Memory stores do not sync state across processes—a task started on Worker A cannot be polled or completed by Worker B.
+### Multi-Worker / Clustered Setups
 
-For production, install the Redis extension and pass it during setup:
-
-```bash
-pip install "fastapi-a2a[redis]"
-```
+When running multiple Uvicorn/Gunicorn workers or orchestrating across Kubernetes pods, in-memory task state cannot be shared between processes. Use `RedisTaskStore` to share task queues and statuses across all nodes:
 
 ```python
-import redis.asyncio as redis
-from fastapi_a2a.stores.redis import RedisTaskStore
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+import redis.asyncio as aioredis
 from fastapi_a2a import setup_fastapi_a2a
+from fastapi_a2a.stores.redis import RedisTaskStore
 
-redis_client = redis.from_url("redis://localhost:6379")
-store = RedisTaskStore(redis_client)
+redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=False)
+store = RedisTaskStore(redis_client, ttl_seconds=86400)
 
-a2a = setup_fastapi_a2a(app, name="Agent", url="...", store=store)
+app = FastAPI()
+
+a2a = setup_fastapi_a2a(
+    app,
+    name="Production Agent",
+    url="https://api.example.com",
+    store=store,
+    max_concurrency=200,
+    max_queue_size=1000,
+    timeout_seconds=60.0,
+)
 ```
 
-## Architecture
+---
 
-The plugin is designed to be highly modular and defensive:
+## Protocol Specification & Architecture
 
-- **Type Safety**: The entire A2A schema (version 0.3.0) is modelled using strict, zero-overhead `TypedDict` implementations validated by Pydantic's `TypeAdapter`.
-- **Stateless by Default**: Out of the box, it uses an `InMemoryTaskStore` with built-in TTL eviction, making it perfect for single-instance deployments or quick local development.
-- **Pluggable Persistence**: For production workloads, you can easily swap the storage backend by implementing the `TaskStore` abstract base class (e.g., using PostgreSQL or the provided Redis adapter).
-- **In-process Bridging**: When an external agent invokes your skill via the RPC endpoint, the request is bridged to your FastAPI route directly through the ASGI protocol. It does not make a network loopback call.
+### Inbound JSON-RPC Methods
 
-## Development
+`fastapi-a2a` exposes the standard JSON-RPC 2.0 interface at `POST /a2a/rpc`:
 
-If you'd like to contribute, we use `uv` for dependency management.
+| Method | Parameters | Description |
+| :--- | :--- | :--- |
+| `message/send` | `{"message": Message}` | Submits a new task for asynchronous execution. Returns `Task` in `submitted` state. |
+| `tasks/get` | `{"id": str}` | Retrieves the current state, progress, and output artifacts for a task. |
+| `tasks/cancel` | `{"id": str}` | Cooperatively cancels an active or queued task. |
+| `tasks/list` | `{"limit": int?, "cursor": str?}` | Lists tasks tracked by the store. |
+
+### Task States & Transitions
+
+```
+[submitted] ──> [working] ──> [completed]
+     │              │
+     ├──> [canceled] <──┘ (tasks/cancel)
+     │
+     └──> [failed] (on exception or timeout)
+```
+
+- **Terminal States**: `completed`, `failed`, `canceled`. Once a task enters a terminal state, its status is immutable.
+- **Resource Cleanup**: Concurrency permits and task references are cleanly reclaimed upon terminal transitions or cancellation.
+
+---
+
+## Configuration Reference
+
+`setup_fastapi_a2a` and `FastApiA2A` accept the following configuration parameters:
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | `str` | *Required* | Agent display name for the Agent Card manifest. |
+| `url` | `str` | *Required* | Public base URL of the agent node. |
+| `version` | `str` | `"1.0.0"` | Agent version string. |
+| `description` | `str?` | `None` | Detailed overview of agent capabilities. |
+| `store` | `TaskStore?` | `InMemoryTaskStore` | Task storage backend (`InMemoryTaskStore` or `RedisTaskStore`). |
+| `max_concurrency`| `int` | `100` | Maximum simultaneous active task executions. |
+| `max_queue_size` | `int?` | `None` | Max backlog capacity before rejecting requests with `-32001 (Server Overloaded)`. |
+| `timeout_seconds`| `float` | `120.0` | Maximum execution time before canceling a task with `failed` status. |
+| `prefix` | `str` | `"/a2a"` | Base path prefix for RPC endpoints (e.g. `/a2a/rpc`). |
+
+---
+
+## Development & Testing
+
+This project uses [`uv`](https://docs.astral.sh/uv/) for high-speed dependency resolution, linting, and testing:
 
 ```bash
+# Install dependencies
 uv sync --group dev
-uv run pytest tests/ -v
-uv run ruff check fastapi_a2a
+
+# Run lint and formatting checks
+uv run ruff check .
+uv run ruff format --check .
+
+# Run static type checking
+uv run pyright
+
+# Run test suite with coverage
+uv run pytest --cov=fastapi_a2a --cov-report=term-missing
+
+# Run critical stress & overload tests
+uv run pytest tests_critical/test_stress.py -v
+
+# Build wheels & sdist
+uv build
 ```
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the terms of the [MIT License](LICENSE).
